@@ -1,28 +1,30 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
-import { Order } from '../orders/order.entity';
-import { OrderStatus } from '../orders/order-status.enum';
+import { Order, OrderStatus } from 'src/orders/order.entity';
 
-@Entity({ name: 'payment_transactions' })
+@Entity()
 export class PaymentTransaction {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Order, order => order.transactions)
+  /**
+   * ✅ ESTA ES LA PARTE QUE FALTA O ESTÁ INCORRECTA
+   * Esta relación @ManyToOne le dice a TypeORM que la entidad
+   * SÍ ACEPTA un objeto 'order' completo.
+   */
+  @ManyToOne(() => Order)
   order: Order;
 
-  @Column()
-  token: string;
+  @Column({
+    type: 'enum',
+    enum: OrderStatus,
+  })
+  status: OrderStatus;
 
   @Column('decimal', { precision: 10, scale: 2 })
   amount: number;
 
-  // ✅ El estado de la transacción puede ser diferente al de la orden
-  @Column({
-    type: 'enum',
-    enum: OrderStatus, // Reutilizamos el enum de OrderStatus
-    default: OrderStatus.PENDING,
-  })
-  status: OrderStatus;
+  @Column({ unique: true })
+  token: string;
 
   @CreateDateColumn()
   createdAt: Date;

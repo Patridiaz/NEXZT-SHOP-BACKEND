@@ -12,6 +12,9 @@ import { BrandsModule } from './brands/brands.module';
 import { GamesModule } from './games/games.module';
 import { EditionsModule } from './editions/editions.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventsModule } from './events/events.module';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -23,9 +26,9 @@ import { ScheduleModule } from '@nestjs/schedule';
         type: 'mysql',
         host: config.get<string>('DB_HOST')!, // <-- el ! fuerza que no sea undefined
         port: parseInt(config.get<string>('DB_PORT')!, 10),
-        username: config.get<string>('DB_USER')!,
+        username: config.get<string>('DB_USERNAME')!,
         password: config.get<string>('DB_PASSWORD')!,
-        database: config.get<string>('DB_NAME')!,
+        database: config.get<string>('DB_DATABASE')!,
         autoLoadEntities: true,
         synchronize: true,
       }),
@@ -39,7 +42,17 @@ import { ScheduleModule } from '@nestjs/schedule';
     BrandsModule,
     GamesModule,
     EditionsModule,
-    ScheduleModule.forRoot()
+    ScheduleModule.forRoot(),
+    EventsModule
+  ],
+    providers: [
+    // ... otros providers que puedas tener
+    
+    // ✅ 3. AÑADE ESTE OBJETO A LA LISTA DE PROVIDERS
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}

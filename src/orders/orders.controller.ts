@@ -1,23 +1,47 @@
-import { Controller, Get, Post, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Req, Body, Param, ParseIntPipe } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Order } from './order.entity';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard'; // 👈 Importa el nuevo guard
+import { CreateOrderDto } from './dto/create-order.dto';
+import type { Request } from 'express';
+import { Public } from 'src/auth/public.decorator';
 
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
+// ❌ YA NO PONEMOS UN GUARDIA A NIVEL DE CLASE
 export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
-  // Crear pedido a partir del carrito
-  @Post() // ✅ CAMBIADO: de @Post('checkout') a @Post()
-  async createOrder(@Req() req): Promise<Order> { // Renombramos el método para más claridad
-    const order = await this.ordersService.createOrder(req.user);
-    return order;
+  // ✅ RUTA PARA CREAR UNA ORDEN (INVITADO O LOGUEADO)
+  // Como no tiene @UseGuards(JwtAuthGuard), el guardia global se activa.
+  // Pero @Public le dice al guardia global que la ignore.
+  // Luego, @UseGuards(OptionalJwtAuthGuard) intenta obtener el usuario si existe.
+  @Public() // Le dice al guardia global que ignore esta ruta
+  @Post()
+  @UseGuards(OptionalJwtAuthGuard) // Usa el guard opcional para ver si hay un usuario logueado
+  createOrder(@Body() createOrderDto: CreateOrderDto, @Req() req: Request) {
+    const user = req.user as any;
+    const userId = user ? user.id : undefined;
+    return this.ordersService.createOrder(createOrderDto, userId);
   }
 
-  // Ver pedidos del usuario logueado
-  @Get()
-  async getOrders(@Req() req) {
-    return this.ordersService.findOrdersByUser(req.user);
+  // ✅ RUTA PARA OBTENER LAS ÓRDENES DEL USUARIO LOGUEADO
+  @Get('mine') // 👈 Cambiamos la ruta a 'mine' para ser más claros
+  @UseGuards(JwtAuthGuard) // 👈 Protegemos la ruta. Solo para usuarios con sesión.
+  getMyOrders(@Req() req: Request) {
+    const user = req.user;
+    // Aquí 'user' NUNCA será undefined, porque JwtAuthGuard lo garantiza.
+    return this.ordersService.findOrdersByUser(user as any);
+  }
+
+  // ✅ RUTA PARA VER UNA ORDEN ESPECÍFICA
+  // La protegemos y en el servicio se debería verificar que el usuario sea el dueño
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  getOrderById(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
+    const user = req.user as any;
+    // En el futuro, podrías crear un método en tu servicio que verifique la propiedad:
+    // return this.ordersService.findOrderByIdForUser(id, user.id);
+    return this.ordersService.findOrderById(id);
+
   }
 }

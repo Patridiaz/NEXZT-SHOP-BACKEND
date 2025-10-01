@@ -11,7 +11,11 @@ export class BrandsController {
   create(@Body() dto: CreateBrandDto): Promise<Brand> {
     return this.brandService.create(dto);
   }
-
+  // ✅ Nuevo endpoint para obtener todas las marcas
+  @Get('all')
+  findAllSimple() {
+    return this.brandService.findAll();
+  }
   @Get()
   findAll(): Promise<Brand[]> {
     return this.brandService.findAll();

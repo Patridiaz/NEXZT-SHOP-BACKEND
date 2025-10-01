@@ -11,6 +11,11 @@ export class GamesController {
   create(@Body() dto: CreateGameDto): Promise<Game> {
     return this.gameService.create(dto);
   }
+    // ✅ Nuevo endpoint para obtener todas las marcas
+  @Get('all')
+  findAllSimple() {
+    return this.gameService.findAll();
+  }
 
   @Get()
   findAll(): Promise<Game[]> {

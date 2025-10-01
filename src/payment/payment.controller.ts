@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import type { Response } from 'express';
+import { Public } from 'src/auth/public.decorator';
 
 @Controller('payments')
 export class PaymentController {
@@ -21,6 +22,7 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   // 🚀 Crear pago asociado a una orden
+  @Public()
   @Post('create/:orderId')
   // ✅ Usamos HttpCode para que un POST exitoso devuelva 200 en lugar del 201 por defecto
   @HttpCode(HttpStatus.OK) 
@@ -36,6 +38,7 @@ export class PaymentController {
   }
 
   // Webhook Flow (confirm)
+  @Public()
   @Post('confirm')
   @HttpCode(HttpStatus.OK) // ✅ Le decimos a NestJS que siempre responda 200 OK
   async confirmPayment(@Body() body: any) {
@@ -59,26 +62,28 @@ export class PaymentController {
   }
   
    // ✅ AÑADE O DESCOMENTA ESTE MÉTODO
-  @Post('return')
-  @HttpCode(HttpStatus.OK)
+@Public()
+  @Post('return') // Esta ruta coincide con FLOW_RETURN_URL
   async paymentReturn(@Body() body: any, @Res() res: Response) {
     this.logger.log('Usuario regresando desde Flow (paso intermedio):', body);
     
     const flowToken = body.token;
+    
     if (!flowToken) {
       // Si no hay token, redirige a una página de error en el frontend
-      const frontendErrorUrl = `${process.env.FLOW_FRONTEND_BASE_URL}/checkout/error`;
+      const frontendErrorUrl = `${process.env.FRONTEND_SUCCESS_URL}/error`; // O una ruta específica
       return res.redirect(frontendErrorUrl);
     }
     
-    // ✅ Construye la URL de éxito final CON el token como query param
-    const frontendSuccessUrl = `${process.env.FLOW_FRONTEND_BASE_URL}/checkout/success?token=${flowToken}`;
+    // Construye la URL de éxito final CON el token como query param
+    const frontendSuccessUrl = `${process.env.FRONTEND_SUCCESS_URL}?token=${flowToken}`;
     
-    // ✅ Redirige el navegador del usuario a la URL final
+    // Redirige el navegador del usuario a la URL final del frontend
     return res.redirect(frontendSuccessUrl);
   }
-
+  
   // 🔍 Consultar estado de un pago
+  @Public()
   @Get('status/:token')
   async getPaymentStatus(@Param('token') token: string) {
     try {

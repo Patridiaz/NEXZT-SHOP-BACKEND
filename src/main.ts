@@ -1,19 +1,30 @@
-// src/main.ts
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core'; // 👈 1. Importar Reflector
 import { AppModule } from './app.module';
-import { NestExpressApplication } from '@nestjs/platform-express'; // 👈 Importar
+import { JwtAuthGuard } from './auth/jwt-auth.guard'; // 👈 2. Importar tu guardia
+import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule); // 👈 Usar NestExpressApplication
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // ✅ Configurar el servidor de archivos estáticos
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads/', // El prefijo de la URL para acceder a los archivos
+  // Configuración de CORS, archivos estáticos, etc.
+  app.enableCors({
+    origin: '*', // Permite cualquier origen (para desarrollo)
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
   });
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
+  
+  app.useGlobalPipes(new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    // ... tus otras opciones
+  }));
 
-  // Habilitar CORS si tu frontend está en otro dominio
-  app.enableCors();
+
 
   await app.listen(3000);
 }

@@ -8,36 +8,47 @@ import { Roles } from './roles.decorator';
 import { UserRole } from 'src/users/user.entity';
 import { RolesGuard } from './roles.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RegisterFromGuestDto } from './dto/register-from-guest.dto';
+import { Public } from './public.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
-    private usersService: UsersService,
   ) {}
 
-  @Post('register')
-  async register(@Body() dto: CreateUserDto) {
-    const existing = await this.usersService.findByEmail(dto.email);
-    if (existing) throw new UnauthorizedException('Email already exists');
-    const user = await this.usersService.create(dto.name, dto.email, dto.password);
-    return { id: user.id, name: user.name, email: user.email };
-  }
+    @Public()
+    @Post('register')
+    async register(@Body() dto: CreateUserDto) {
+      // ✅ CORRECCIÓN 2: Toda la lógica se delega al servicio.
+      return this.authService.register(dto);
+    }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @Post('create-admin')
-  createAdmin(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto.name, dto.email, dto.password, UserRole.ADMIN);
-  }
-
-
+  @Public()
   @Post('login')
   async login(@Body() dto: LoginDto) {
     const user = await this.authService.validateUser(dto.email, dto.password);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-    return this.authService.login(user);
+    if (!user) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    return this.authService.login(user as any);
   }
 
+
+  // @Public()
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
+  // @Post('create-admin')
+  // createAdmin(@Body() dto: CreateUserDto) {
+  //   return this.usersService.create(dto.name, dto.email, dto.password, UserRole.ADMIN);
+  // }
+
+
+
+  @Public()
+  @Post('register-from-guest')
+  registerFromGuest(@Body() dto: RegisterFromGuestDto) {
+    return this.authService.registerFromGuest(dto);
+  }
   
 }

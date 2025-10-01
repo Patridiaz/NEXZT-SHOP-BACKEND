@@ -8,12 +8,14 @@ import { Game } from 'src/games/game.entity';
 import { EditionsModule } from 'src/editions/editions.module';
 import { ProductController } from './products.controller';
 import { ProductService } from './products.service';
+import { ExcelModule } from 'src/excel/excel.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product, Brand, Edition, Game]), 
     BrandsModule,
     EditionsModule,
+    ExcelModule
 
   ],
   controllers: [ProductController],

@@ -1,5 +1,6 @@
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
 import { ProductCategory } from '../enums/product-category.enum';
+import { ProductRarity } from '../enums/product-rarity.enum';
 
 export class CreateProductDto {
   @IsNotEmpty()
@@ -43,4 +44,8 @@ export class CreateProductDto {
   @IsNumber()
   @IsPositive()
   gameId?: number;
+
+  @IsOptional()
+  @IsEnum(ProductRarity)
+  rarity?: ProductRarity;
 }

@@ -3,6 +3,7 @@ import { Edition } from 'src/editions/edition.entity';
 import { Game } from 'src/games/game.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ProductCategory } from './enums/product-category.enum';
+import { ProductRarity } from './enums/product-rarity.enum';
 @Entity('products')
 export class Product {
   @PrimaryGeneratedColumn()
@@ -50,4 +51,11 @@ export class Product {
   @ManyToOne(() => Edition, (edition) => edition.products ,{ nullable: true, eager: true })
   @JoinColumn({ name: 'edition_id' })
   edition: Edition | null;
+
+  @Column({
+    type: 'enum',
+    enum: ProductRarity,
+    nullable: true, // ✅ Permite que productos antiguos no tengan rareza
+  })
+  rarity: ProductRarity;
 }

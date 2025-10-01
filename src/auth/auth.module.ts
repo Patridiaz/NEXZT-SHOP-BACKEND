@@ -5,10 +5,16 @@ import { UsersModule } from '../users/users.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
+import { PaymentModule } from 'src/payment/payment.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from 'src/users/user.entity';
+import { Order } from 'src/orders/order.entity';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Module({
   imports: [
-    UsersModule,
+    PaymentModule,
+    TypeOrmModule.forFeature([User, Order]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -19,7 +25,7 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   controllers: [AuthController], // ← importante
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy,JwtAuthGuard],
+  exports: [AuthService,JwtAuthGuard],
 })
 export class AuthModule {}
