@@ -5,10 +5,11 @@ import { CartController } from './cart.controller';
 import { CartItem } from './cart.entity';
 import { Product } from '../products/product.entity';
 import { UsersModule } from '../users/users.module';
+import { GuestCartItem } from './guest-cart-item.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CartItem, Product]),
+    TypeOrmModule.forFeature([CartItem, Product,GuestCartItem]),
     UsersModule, // para poder obtener info del usuario
   ],
   controllers: [CartController],

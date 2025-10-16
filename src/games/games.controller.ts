@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common'
 import { CreateGameDto, UpdateGameDto } from './dto/game.dto';
 import { Game } from './game.entity';
 import { GamesService } from './games.service';
+import { Public } from 'src/auth/public.decorator';
 
 @Controller('games')
 export class GamesController {
@@ -11,7 +12,8 @@ export class GamesController {
   create(@Body() dto: CreateGameDto): Promise<Game> {
     return this.gameService.create(dto);
   }
-    // ✅ Nuevo endpoint para obtener todas las marcas
+  
+  @Public()
   @Get('all')
   findAllSimple() {
     return this.gameService.findAll();

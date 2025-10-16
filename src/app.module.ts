@@ -15,6 +15,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventsModule } from './events/events.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { DashboardModule } from './admin/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -43,7 +44,8 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
     GamesModule,
     EditionsModule,
     ScheduleModule.forRoot(),
-    EventsModule
+    EventsModule,
+    DashboardModule
   ],
     providers: [
     // ... otros providers que puedas tener
