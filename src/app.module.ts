@@ -24,14 +24,19 @@ import { DashboardModule } from './admin/dashboard/dashboard.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'mysql',
-        host: config.get<string>('DB_HOST')!, // <-- el ! fuerza que no sea undefined
-        port: parseInt(config.get<string>('DB_PORT')!, 10),
-        username: config.get<string>('DB_USERNAME')!,
-        password: config.get<string>('DB_PASSWORD')!,
-        database: config.get<string>('DB_DATABASE')!,
+        // ✅ 1. Cambia el tipo de base de datos
+        type: 'postgres',
+
+        // ✅ 2. Lee la URL completa desde una sola variable de entorno
+        url: config.get<string>('DATABASE_URL'),
+
+        // ✅ 3. Añade este bloque para la conexión segura (requerido por Render)
+        ssl: {
+          rejectUnauthorized: false,
+        },
+
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: true, // Ideal para desarrollo, considera migraciones para producción
       }),
     }),
     UsersModule,
@@ -48,9 +53,6 @@ import { DashboardModule } from './admin/dashboard/dashboard.module';
     DashboardModule
   ],
     providers: [
-    // ... otros providers que puedas tener
-    
-    // ✅ 3. AÑADE ESTE OBJETO A LA LISTA DE PROVIDERS
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
