@@ -173,16 +173,22 @@ async replenishStock(items: OrderItem[]): Promise<void> {
   });
 }
 
-  async findRandom(limit: number): Promise<Product[]> {
-    // Usamos QueryBuilder para poder usar la función RANDOM() de la base de datos
-    const query = this.productRepo.createQueryBuilder('product')
-      .leftJoinAndSelect('product.brand', 'brand') // Incluye las relaciones que necesites
-      .orderBy('RAND()') // Para PostgreSQL / SQLite
-      // .orderBy('RAND()') // Descomenta esta línea y comenta la anterior si usas MySQL
-      .take(limit); // Limita el número de resultados
+// In: src/products/product.service.ts
 
-    return query.getMany();
-  }
+async findRandom(limit: number): Promise<Product[]> {
+  const query = this.productRepo.createQueryBuilder('product')
+    .leftJoinAndSelect('product.brand', 'brand') // Include necessary relations
+    
+    // ✅ 1. Add RANDOM() to the SELECT list with an alias
+    .addSelect('RANDOM()', 'random_order') 
+    
+    // ✅ 2. Order by the alias instead of the function directly
+    .orderBy('random_order', 'ASC') 
+    
+    .take(limit); // Limit the results
+
+  return query.getMany();
+}
 
   async remove(id: number): Promise<void> {
     const product = await this.findOne(id);

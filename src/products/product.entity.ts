@@ -39,16 +39,16 @@ export class Product {
   @Column('int')
   stock: number;
 
-  @ManyToOne(() => Brand, (brand) => brand.products, { nullable: false, eager: true })
+  @ManyToOne(() => Brand, (brand) => brand.products, { nullable: false})
   @JoinColumn({ name: 'brandId' })
   brand: Brand;
 
 
-  @ManyToOne(() => Game, (game) => game.products, { nullable: true, eager: true })
+  @ManyToOne(() => Game, (game) => game.products, { nullable: true })
   @JoinColumn({ name: 'game_id' })
   game: Game | null;
 
-  @ManyToOne(() => Edition, (edition) => edition.products ,{ nullable: true, eager: true })
+  @ManyToOne(() => Edition, (edition) => edition.products ,{ nullable: true})
   @JoinColumn({ name: 'edition_id' })
   edition: Edition | null;
 

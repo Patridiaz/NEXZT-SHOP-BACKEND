@@ -1,47 +1,64 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
+import { Transform } from 'class-transformer'; // 👈 Import Transform
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsInt,       // 👈 Import IsInt for IDs and stock
+  Min          // 👈 Import Min for stock and offerPrice
+} from 'class-validator';
 import { ProductCategory } from '../enums/product-category.enum';
 import { ProductRarity } from '../enums/product-rarity.enum';
 
 export class CreateProductDto {
+  @IsString() // TypeORM/PostgreSQL handle varchar length, focus on validation
+  @IsNotEmpty()
+  code: string;
+
+  @IsString()
   @IsNotEmpty()
   name: string;
 
   @IsString()
   @IsNotEmpty()
-  code: string; // obligatorio y único
-
-  @IsNotEmpty()
   description: string;
 
-  // ✅ AGREGAR VALIDACIÓN PARA LA CATEGORÍA
   @IsEnum(ProductCategory)
   @IsNotEmpty()
   category: ProductCategory;
 
-  @IsNumber()
+  @Transform(({ value }) => parseFloat(value)) // Convert string to float
+  @IsNumber({ maxDecimalPlaces: 2 }) // Ensure correct decimal format
   @IsPositive()
   price: number;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  discountPrice?: number;
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0) // Offer price can be 0
+  offerPrice?: number; // Renamed from discountPrice
 
-  @IsNumber()
-  @IsPositive()
+  @Transform(({ value }) => parseInt(value, 10)) // Convert string to integer
+  @IsInt() // Validate as integer
+  @Min(0) // Stock can be 0
   stock: number;
 
-  @IsNumber()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
   @IsPositive()
-  brandId: number; // ✅ ahora es obligatorio
+  brandId: number;
 
   @IsOptional()
-  @IsNumber()
+  @Transform(({ value }) => value ? parseInt(value, 10) : undefined) // Handle optional conversion
+  @IsInt()
   @IsPositive()
   editionId?: number;
 
   @IsOptional()
-  @IsNumber()
+  @Transform(({ value }) => value ? parseInt(value, 10) : undefined)
+  @IsInt()
   @IsPositive()
   gameId?: number;
 

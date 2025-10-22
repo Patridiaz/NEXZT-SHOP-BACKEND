@@ -106,10 +106,7 @@ export class ProductController {
   remove(@Param('id') id: string) {
     return this.productService.remove(+id);
   }
-
-
-
-
+  
  // --- Endpoints de Carga Masiva ---
   @Get('bulk/template')
   async downloadTemplate(@Res() res: Response) {

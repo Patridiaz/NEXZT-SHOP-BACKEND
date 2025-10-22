@@ -37,9 +37,19 @@ export class AuthService {
   }
 
   async login(user: User) {
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    // Asegúrate de que el objeto 'user' que recibes aquí ya no tiene la contraseña.
+    // El método validateUser ya se encarga de quitarla.
+    
+    const payload = { 
+      sub: user.id, 
+      email: user.email, 
+      role: user.role // Asegúrate de que tu entidad User tenga 'role' y no 'roles'
+    };
+    
+    // ✅ CORRECCIÓN: Devuelve tanto el token como el objeto 'user'
     return {
       access_token: this.jwtService.sign(payload),
+      user: user // Devuelve el objeto de usuario (sin contraseña) que recibiste
     };
   }
 

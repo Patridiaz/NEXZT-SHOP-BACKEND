@@ -4,6 +4,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard'; // 👈 2. Importar tu gua
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -24,7 +25,7 @@ async function bootstrap() {
     // ... tus otras opciones
   }));
 
-
+  app.use(cookieParser());
 
   await app.listen(3000);
 }
