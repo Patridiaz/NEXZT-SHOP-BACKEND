@@ -12,6 +12,7 @@ import { ExcelService } from 'src/excel/excel.service';
 import type { Response } from 'express';
 import { GetProductsByIdsDto } from './dto/get-products-by-ids.dto';
 import { Public } from 'src/auth/public.decorator';
+import { multerOptions } from './multer.config';
 
 @Controller('products')
 export class ProductController {
@@ -21,15 +22,7 @@ export class ProductController {
   ) {}
 
 @Post()
-  @UseInterceptors(FileInterceptor('file', { // 👈 'file' debe coincidir con el nombre del campo en el frontend
-    storage: diskStorage({
-      destination: './uploads', // Directorio donde se guardarán las imágenes
-      filename: (req, file, cb) => {
-        const randomName = Array(32).fill(null).map(() => (Math.round(Math.random() * 16)).toString(16)).join('');
-        cb(null, `${randomName}${extname(file.originalname)}`);
-      },
-    }),
-  }))
+  @UseInterceptors(FileInterceptor('file', multerOptions))
   create(
     @UploadedFile() file: Express.Multer.File, // 👈 Inyectar el archivo
     @Body() createProductDto: CreateProductDto // 👈 Inyectar el DTO
@@ -37,6 +30,8 @@ export class ProductController {
     // Pasar el archivo al servicio para que guarde la ruta
     return this.productService.create(createProductDto, file);
   }
+
+
   @Public()
    @Get()
   findAll(
@@ -91,14 +86,13 @@ export class ProductController {
   }
 
 // ✅ MÉTODO DE ACTUALIZACIÓN CORREGIDO
-  @Patch(':id')
-  @UseInterceptors(FileInterceptor('file')) // 1. Añade el interceptor para leer el archivo
+@Patch(':id')
+  @UseInterceptors(FileInterceptor('file', multerOptions)) // <-- Usa la misma variable
   update(
-    @Param('id', ParseIntPipe) id: number, // 2. Parsea el ID a número
-    @Body() updateProductDto: UpdateProductDto, // 3. Recibe los datos del formulario
-    @UploadedFile() file?: Express.Multer.File, // 4. Recibe el archivo (es opcional)
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateProductDto: UpdateProductDto,
+    @UploadedFile() file?: Express.Multer.File, 
   ) {
-    // 5. Llama al servicio con todos los datos
     return this.productService.update(id, updateProductDto, file);
   }
 
