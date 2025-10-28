@@ -15,10 +15,13 @@ export class DashboardService {
   async getSalesOverTime() {
     return this.orderRepo
       .createQueryBuilder('order')
-      .select("DATE(order.createdAt) as date")
+      .select("DATE(order.createdAt)", "date") // No necesitas "as date" aquí
       .addSelect("SUM(order.total)", "sales")
       .where("order.status = :status", { status: OrderStatus.PAID })
-      .andWhere("order.createdAt > DATE_SUB(NOW(), INTERVAL 30 DAY)")
+      
+      // ✅ CORRECCIÓN: Sintaxis de PostgreSQL para restar 30 días
+      .andWhere("order.createdAt > NOW() - INTERVAL '30 days'")
+      
       .groupBy("date")
       .orderBy("date", "ASC")
       .getRawMany();
@@ -33,8 +36,11 @@ export class DashboardService {
       .innerJoin('order_item.product', 'product')
       .innerJoin('order_item.order', 'order')
       .where('order.status = :status', { status: OrderStatus.PAID })
-      .groupBy('product.id')
-      .orderBy('totalSold', 'DESC')
+      .groupBy('product.id') // Agrupar por product.id es más seguro
+
+      // ✅ CORRECCIÓN: Ordenar por la función SUM() en lugar del alias
+      .orderBy('SUM(order_item.quantity)', 'DESC')
+
       .limit(limit)
       .getRawMany();
   }

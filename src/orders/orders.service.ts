@@ -44,18 +44,15 @@ async createOrder(dto: CreateOrderDto, userId?: number): Promise<Order> {
       const products = await transactionalEntityManager.findByIds(Product, productIds);
       const productMap = new Map(products.map(p => [p.id, p]));
 
-      // ✅ CORRECCIÓN 1: Se mapean los productos y se verifica que no sean 'undefined'
       const potentialCartItems = dto.guestCart.map(item => ({
         product: productMap.get(item.productId),
         quantity: item.quantity,
       }));
 
-      // ✅ CORRECCIÓN 2: Se lanza un error si algún producto del carrito es inválido
       if (potentialCartItems.some(item => !item.product)) {
         throw new BadRequestException('Uno o más productos en el carrito son inválidos o fueron eliminados.');
       }
       
-      // Ahora es seguro asignar, ya que todos los productos existen.
       cartItems = potentialCartItems as { product: Product; quantity: number }[];
     }
 
@@ -79,7 +76,11 @@ async createOrder(dto: CreateOrderDto, userId?: number): Promise<Order> {
       const orderItem = new OrderItem();
       orderItem.product = item.product;
       orderItem.quantity = item.quantity;
-      orderItem.price = item.product.offerPrice ?? item.product.price;
+      
+      orderItem.price = (item.product.offerPrice && item.product.offerPrice > 0) 
+        ? item.product.offerPrice 
+        : item.product.price;
+        
       return orderItem;
     });
 
@@ -104,14 +105,10 @@ async createOrder(dto: CreateOrderDto, userId?: number): Promise<Order> {
 
     const savedOrder = await transactionalEntityManager.save(order);
     
-    // --- 4. DESCONTAR STOCK Y LIMPIAR CARRITO ---
-    for (const item of cartItems) {
-      await transactionalEntityManager.decrement(Product, { id: item.product.id }, 'stock', item.quantity);
-    }
+
     if (userId) {
       await transactionalEntityManager.delete(CartItem, { user: { id: userId } });
     }
-
     return savedOrder;
   });
 }  

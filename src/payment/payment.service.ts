@@ -25,8 +25,7 @@ private buildSignature(params: Record<string, string>): string {
   const sortedKeys = Object.keys(params).sort();
   const stringToSign = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
 
-  // ✅ LA CORRECCIÓN ESTÁ AQUÍ Y ES CRÍTICA
-  // El algoritmo DEBE ser 'sha256'. Un error tipográfico como 'sha26' causará este error.
+
   return crypto.createHmac('sha256', this.secretKey).update(stringToSign).digest('hex');
 }
 
@@ -127,13 +126,17 @@ async createPayment(orderId: number) {
       this.logger.log(`Nuevo estado para la orden ${orderId}: ${newStatus}`);
 
       if (newStatus === OrderStatus.PAID && order.status === OrderStatus.PENDING) {
-        // El stock ya se descontó al crear la orden, así que no hacemos nada más.
-        this.logger.log(`Orden ${orderId} pagada.`);
-      } else if (newStatus === OrderStatus.CANCELLED && order.status === OrderStatus.PENDING) {
-        // Si el pago falla o se anula, reponemos el stock.
-        await this.productService.replenishStock(order.items);
-        this.logger.log(`Pago fallido/anulado. Stock para la orden ${orderId} repuesto.`);
-      }
+          
+          // ✅ 1. AÑADE ESTA LÍNEA: Descontamos el stock SÓLO si el pago es exitoso.
+          await this.productService.deductStock(order.items); 
+          this.logger.log(`Orden ${orderId} pagada. Stock descontado.`);
+
+        } else if (newStatus === OrderStatus.CANCELLED && order.status === OrderStatus.PENDING) {
+          
+          // ✅ 2. BORRA ESTA LÍNEA: Ya no reponemos stock, porque nunca se descontó.
+          // await this.productService.replenishStock(order.items); 
+          this.logger.log(`Pago fallido/anulado. No se hace nada con el stock.`);
+        }
       
       order.status = newStatus;
       await this.orderRepo.save(order);

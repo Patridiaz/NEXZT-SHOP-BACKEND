@@ -160,6 +160,8 @@ async update(id: number, dto: UpdateProductDto, file?: Express.Multer.File): Pro
   return this.productRepo.save(product);
 }
 
+
+
 async replenishStock(items: OrderItem[]): Promise<void> {
   await this.entityManager.transaction(async transactionalEntityManager => {
     for (const item of items) {
@@ -173,22 +175,29 @@ async replenishStock(items: OrderItem[]): Promise<void> {
   });
 }
 
-// In: src/products/product.service.ts
+  async findRandom(limit: number): Promise<Product[]> {
+    // 1. Obtenemos solo los IDs de productos aleatorios.
+    const randomIdsResult = await this.productRepo.createQueryBuilder('product')
+      .select('product.id', 'id') // Seleccionamos solo el ID
+      .orderBy('RANDOM()')
+      .take(limit)
+      .getRawMany(); // Usamos getRawMany para una consulta simple
 
-async findRandom(limit: number): Promise<Product[]> {
-  const query = this.productRepo.createQueryBuilder('product')
-    .leftJoinAndSelect('product.brand', 'brand') // Include necessary relations
-    
-    // ✅ 1. Add RANDOM() to the SELECT list with an alias
-    .addSelect('RANDOM()', 'random_order') 
-    
-    // ✅ 2. Order by the alias instead of the function directly
-    .orderBy('random_order', 'ASC') 
-    
-    .take(limit); // Limit the results
+    if (randomIdsResult.length === 0) {
+      return []; // Si no hay productos, devuelve un array vacío
+    }
 
-  return query.getMany();
-}
+    // Extraemos los IDs del resultado
+    const randomIds = randomIdsResult.map(r => r.id);
+
+    // 2. Ahora buscamos los productos completos por esos IDs, con sus relaciones
+    return this.productRepo.find({
+      where: {
+        id: In(randomIds), // Usa el operador "In" para buscar por una lista de IDs
+      },
+      relations: ['brand', 'edition', 'game'], // Carga las relaciones que necesites
+    });
+  }
 
   async remove(id: number): Promise<void> {
     const product = await this.findOne(id);
