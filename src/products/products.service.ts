@@ -58,9 +58,9 @@ async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product>
   return this.productRepo.save(product);
 }
  // ✅ MÉTODO findAll OPTIMIZADO
- async findAll(filters: { brandId?: number; category?: string; game?: string; gameId?: number; page?: number; limit?: number; search?: string; rarity?: ProductRarity }) {
-    const { page = 1, limit = 10, search, game,brandId, gameId, category, rarity } = filters;
-
+ async findAll(filters: { brandId?: number; category?: string; game?: string; gameId?: number; page?: number; limit?: number; search?: string; rarity?: ProductRarity, sort?: string; 
+    order?: 'ASC' | 'DESC'; }) {
+    const { page = 1, limit = 10, search, game,brandId, gameId, category, rarity, sort = 'name', order = 'ASC' } = filters;
     const query = this.productRepo.createQueryBuilder('product')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.game', 'game')
@@ -68,19 +68,38 @@ async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product>
 
     // La búsqueda por texto ahora incluye el código del producto
     if (search) {
+      // 1. Añadimos los comodines '%' para búsqueda parcial
+      const searchTerm = `%${search}%`; 
+
+      // 2. Usamos 'ILIKE' para ignorar mayúsculas/minúsculas
+      // 3. Añadimos más campos a la búsqueda (game.name, edition.name)
       query.andWhere(
-        '(product.name LIKE :search OR product.code LIKE :search OR brand.name LIKE :search)',
-        { search: `%${search}%` }
+        '(product.name ILIKE :search OR ' +
+        'product.code ILIKE :search OR ' +
+        'brand.name ILIKE :search OR ' +
+        'game.name ILIKE :search OR ' +
+        'edition.name ILIKE :search)',
+        { search: searchTerm }
       );
     }
     
-    // ✅ Nuevos filtros
-    // ✅ Añade la lógica para filtrar por el nombre del juego
     if (game) query.andWhere('game.name = :gameName', { gameName: game });
     if (brandId) query.andWhere('product.brandId = :brandId', { brandId });
     if (gameId) query.andWhere('product.gameId = :gameId', { gameId });
     if (rarity) query.andWhere('product.rarity = :rarity', { rarity });
     if (category) query.andWhere('product.category = :category', { category });
+
+    const sortMap = {
+      'code': 'product.code',
+      'name': 'product.name',
+      'rarity': 'product.rarity',
+      'edition': 'edition.name', // Ordena por el *nombre* de la edición
+      'stock': 'product.stock',
+      'price': 'product.price'
+    };
+
+    const sortKey = sortMap[sort] || 'product.name';
+    query.orderBy(sortKey, order);
 
     query.skip((page - 1) * limit).take(limit);
 

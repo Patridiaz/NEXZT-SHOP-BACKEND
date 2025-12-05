@@ -31,9 +31,9 @@ import { DashboardModule } from './admin/dashboard/dashboard.module';
         url: config.get<string>('DATABASE_URL'),
 
         // ✅ 3. Añade este bloque para la conexión segura (requerido por Render)
-        ssl: {
-          rejectUnauthorized: false,
-        },
+        ssl: process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
 
         autoLoadEntities: true,
         synchronize: true, // Ideal para desarrollo, considera migraciones para producción

@@ -39,10 +39,9 @@ export class ProductController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('category') category?: string,
-    // ✅ Añade el parámetro 'game' para recibir el nombre del juego desde la URL
     @Query('game') game?: string,
-    
-    // ✅ CORRECCIÓN AQUÍ: Añade { optional: true } al ParseIntPipe
+    @Query('sort') sort?: string,
+    @Query('order') order?: 'ASC' | 'DESC',
     @Query('brandId', new ParseIntPipe({ optional: true })) brandId?: number,
     @Query('gameId', new ParseIntPipe({ optional: true })) gameId?: number,
     
@@ -57,6 +56,8 @@ export class ProductController {
       brandId,
       gameId,
       rarity,
+      sort,  
+      order,    
     });
   }
   @Public()

@@ -16,4 +16,7 @@ export class Game {
 
   @OneToMany(() => Edition, (edition) => edition.game)
   editions: Edition[];
+
+  @Column({ default: false })
+  showInNavbar: boolean;
 }

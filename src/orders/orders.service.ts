@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
-import { Order, OrderStatus } from './order.entity'; // ✅ 1. Importa OrderStatus
+import { DeliveryStatus, Order, OrderStatus } from './order.entity'; // ✅ 1. Importa OrderStatus
 import { OrderItem } from './order-item.entity';
 import { CartService } from '../cart/cart.service';
 import { User } from '../users/user.entity';
@@ -137,4 +137,22 @@ async createOrder(dto: CreateOrderDto, userId?: number): Promise<Order> {
     }
     return this.findOrderById(orderId);
   }
+
+  async findAll() {
+    return this.ordersRepo.find({
+      relations: ['user', 'items', 'items.product'], // Trae info del usuario y productos
+      order: { createdAt: 'DESC' } // Los más recientes primero
+    });
+  }
+
+  async updateDeliveryStatus(orderId: number, status: DeliveryStatus): Promise<Order> {
+    const order = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+    
+    order.deliveryStatus = status;
+    return this.ordersRepo.save(order);
+  }
+  
 }

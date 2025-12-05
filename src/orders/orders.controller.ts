@@ -1,10 +1,14 @@
-import { Controller, Get, Post, UseGuards, Req, Body, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Req, Body, Param, ParseIntPipe, Patch } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard'; // 👈 Importa el nuevo guard
 import { CreateOrderDto } from './dto/create-order.dto';
 import type { Request } from 'express';
 import { Public } from 'src/auth/public.decorator';
+import { RolesGuard } from 'src/auth/roles.guard';
+import { Roles } from 'src/auth/roles.decorator';
+import { UserRole } from 'src/users/user.entity';
+import { DeliveryStatus } from './order.entity';
 
 @Controller('orders')
 // ❌ YA NO PONEMOS UN GUARDIA A NIVEL DE CLASE
@@ -43,5 +47,22 @@ export class OrdersController {
     // return this.ordersService.findOrderByIdForUser(id, user.id);
     return this.ordersService.findOrderById(id);
 
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard) // Protege esta ruta específica
+  @Roles(UserRole.ADMIN) // Solo rol admin
+  findAll() {
+    return this.ordersService.findAll();
+  }
+
+  @Patch(':id/delivery-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async updateDeliveryStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('status') status: DeliveryStatus // Recibe { status: 'SHIPPED' }
+  ) {
+    return this.ordersService.updateDeliveryStatus(id, status);
   }
 }

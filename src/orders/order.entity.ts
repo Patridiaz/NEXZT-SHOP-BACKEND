@@ -10,6 +10,15 @@ export enum OrderStatus {
   CANCELLED = 'CANCELADO',
 }
 
+// ✅ NUEVO: Estado Logístico
+export enum DeliveryStatus {
+  PREPARING = 'PREPARING',             // Inicial / En preparación
+  READY_FOR_PICKUP = 'READY_FOR_PICKUP', // Listo para retiro en tienda
+  DISPATCHED = 'DISPATCHED',           // Despachado (entregado al courier)
+  SHIPPED = 'SHIPPED',                 // Enviado / En tránsito
+  DELIVERED = 'DELIVERED',             // Entregado al cliente
+}
+
 @Entity()
 export class Order {
   @PrimaryGeneratedColumn()
@@ -42,4 +51,11 @@ export class Order {
 
   @Column()
   expiresAt: Date;
+
+  @Column({ 
+    type: 'enum', 
+    enum: DeliveryStatus, 
+    default: DeliveryStatus.PREPARING 
+  })
+  deliveryStatus: DeliveryStatus;
 }

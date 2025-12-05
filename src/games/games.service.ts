@@ -36,4 +36,16 @@ export class GamesService {
     const game = await this.findOne(id);
     await this.gameRepo.remove(game);
   }
+
+  findForNavbar(): Promise<Game[]> {
+    return this.gameRepo.find({ 
+      where: { 
+        showInNavbar: true 
+      },
+      order: {
+        name: 'ASC'
+      }
+     });
+  }
+
 }
