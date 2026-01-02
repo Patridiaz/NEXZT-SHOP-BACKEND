@@ -20,59 +20,88 @@ export class ProductService {
     @InjectRepository(Brand) private readonly brandRepo: Repository<Brand>,
     @InjectRepository(Edition) private readonly editionRepo: Repository<Edition>,
     @InjectRepository(Game) private readonly gameRepo: Repository<Game>,
-     private entityManager: EntityManager,
-  ) {}
+    private entityManager: EntityManager,
+  ) { }
 
-async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product> {
-  const codeExists = await this.productRepo.findOneBy({ code: dto.code });
-  if (codeExists) {
-    throw new BadRequestException(`El código de producto ${dto.code} ya existe.`);
+  async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product> {
+    const codeExists = await this.productRepo.findOneBy({ code: dto.code });
+    if (codeExists) {
+      throw new BadRequestException(`El código de producto ${dto.code} ya existe.`);
+    }
+
+    // 1. Crea la instancia del producto con los datos básicos
+    const product = this.productRepo.create(dto);
+
+    // 2. Asigna la URL de la imagen
+    if (file) {
+      product.imageUrl = `/uploads/${file.filename}`;
+    }
+
+    // ✅ 3. Busca y asigna TODAS las relaciones
+    const brand = await this.brandRepo.findOneBy({ id: dto.brandId });
+    if (!brand) throw new NotFoundException(`Marca con ID ${dto.brandId} no encontrada`);
+    product.brand = brand;
+
+    if (dto.gameId) {
+      const game = await this.gameRepo.findOneBy({ id: dto.gameId });
+      if (!game) throw new NotFoundException(`Juego con ID ${dto.gameId} no encontrado`);
+      product.game = game;
+    }
+
+    if (dto.editionId) {
+      const edition = await this.editionRepo.findOneBy({ id: dto.editionId });
+      if (!edition) throw new NotFoundException(`Edición con ID ${dto.editionId} no encontrada`);
+      product.edition = edition;
+    }
+
+    // 4. Guarda el nuevo producto
+    return this.productRepo.save(product);
   }
+  // ✅ MÉTODO findAll OPTIMIZADO
+  async findAll(filters: {
+    brandId?: number;
+    category?: string;
+    game?: string;
+    gameId?: number;
+    editionId?: number;
+    rarity?: ProductRarity;
+    code?: string;
+    name?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    sort?: string;
+    order?: 'ASC' | 'DESC';
+  }) {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      game,
+      brandId,
+      gameId,
+      editionId,
+      category,
+      rarity,
+      code,
+      name,
+      sort = 'name',
+      order = 'ASC'
+    } = filters;
 
-  // 1. Crea la instancia del producto con los datos básicos
-  const product = this.productRepo.create(dto);
+    // LOG PARA DEBUG EN LA TERMINAL (Ayuda al usuario a ver qué llega del frontend)
+    console.log('[DEBUG] Products Search Params:', {
+      search, category, game, gameId, brandId, editionId, rarity
+    });
 
-  // 2. Asigna la URL de la imagen
-  if (file) {
-    product.imageUrl = `/uploads/${file.filename}`;
-  }
-
-  // ✅ 3. Busca y asigna TODAS las relaciones
-  const brand = await this.brandRepo.findOneBy({ id: dto.brandId });
-  if (!brand) throw new NotFoundException(`Marca con ID ${dto.brandId} no encontrada`);
-  product.brand = brand;
-  
-  if (dto.gameId) {
-    const game = await this.gameRepo.findOneBy({ id: dto.gameId });
-    if (!game) throw new NotFoundException(`Juego con ID ${dto.gameId} no encontrado`);
-    product.game = game;
-  }
-  
-  if (dto.editionId) {
-    const edition = await this.editionRepo.findOneBy({ id: dto.editionId });
-    if (!edition) throw new NotFoundException(`Edición con ID ${dto.editionId} no encontrada`);
-    product.edition = edition;
-  }
-
-  // 4. Guarda el nuevo producto
-  return this.productRepo.save(product);
-}
- // ✅ MÉTODO findAll OPTIMIZADO
- async findAll(filters: { brandId?: number; category?: string; game?: string; gameId?: number; page?: number; limit?: number; search?: string; rarity?: ProductRarity, sort?: string; 
-    order?: 'ASC' | 'DESC'; }) {
-    const { page = 1, limit = 10, search, game,brandId, gameId, category, rarity, sort = 'name', order = 'ASC' } = filters;
     const query = this.productRepo.createQueryBuilder('product')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.game', 'game')
       .leftJoinAndSelect('product.edition', 'edition');
 
-    // La búsqueda por texto ahora incluye el código del producto
-    if (search) {
-      // 1. Añadimos los comodines '%' para búsqueda parcial
-      const searchTerm = `%${search}%`; 
-
-      // 2. Usamos 'ILIKE' para ignorar mayúsculas/minúsculas
-      // 3. Añadimos más campos a la búsqueda (game.name, edition.name)
+    // La búsqueda por texto general
+    if (search && search.trim() !== '') {
+      const searchTerm = `%${search}%`;
       query.andWhere(
         '(product.name ILIKE :search OR ' +
         'product.code ILIKE :search OR ' +
@@ -82,18 +111,39 @@ async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product>
         { search: searchTerm }
       );
     }
-    
-    if (game) query.andWhere('game.name = :gameName', { gameName: game });
-    if (brandId) query.andWhere('product.brandId = :brandId', { brandId });
-    if (gameId) query.andWhere('product.gameId = :gameId', { gameId });
+
+    // Filtros explícitos
+    if (code) {
+      query.andWhere('product.code ILIKE :code', { code: `%${code}%` });
+    }
+    if (name) {
+      query.andWhere('product.name ILIKE :name', { name: `%${name}%` });
+    }
+
+    // Si llega gameName, filtramos por nombre. 
+    // Si llega gameId, filtramos por ID.
+    if (game && game !== 'undefined' && game !== 'null') {
+      // Si el frontend envía el ID en el parámetro 'game', lo manejamos
+      if (!isNaN(Number(game))) {
+        query.andWhere('game.id = :gameIdFromGame', { gameIdFromGame: Number(game) });
+      } else {
+        query.andWhere('game.name = :gameName', { gameName: game });
+      }
+    }
+
+    if (brandId) query.andWhere('brand.id = :brandId', { brandId });
+    if (gameId) query.andWhere('game.id = :gameId', { gameId });
+    if (editionId) query.andWhere('edition.id = :editionId', { editionId });
     if (rarity) query.andWhere('product.rarity = :rarity', { rarity });
-    if (category) query.andWhere('product.category = :category', { category });
+    if (category && category !== 'undefined' && category !== 'null' && category !== 'all') {
+      query.andWhere('product.category = :category', { category });
+    }
 
     const sortMap = {
       'code': 'product.code',
       'name': 'product.name',
       'rarity': 'product.rarity',
-      'edition': 'edition.name', // Ordena por el *nombre* de la edición
+      'edition': 'edition.name',
       'stock': 'product.stock',
       'price': 'product.price'
     };
@@ -108,28 +158,28 @@ async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product>
   }
 
   async findByFilter(filters: { game?: string; category?: string }): Promise<Product[]> {
-  const query = this.productRepo.createQueryBuilder('product')
-    .leftJoinAndSelect('product.brand', 'brand')
-    .leftJoinAndSelect('product.game', 'game')
-    .leftJoinAndSelect('product.edition', 'edition');
+    const query = this.productRepo.createQueryBuilder('product')
+      .leftJoinAndSelect('product.brand', 'brand')
+      .leftJoinAndSelect('product.game', 'game')
+      .leftJoinAndSelect('product.edition', 'edition');
 
-  if (filters.game) {
-    query.andWhere('game.name = :gameName', { gameName: filters.game });
+    if (filters.game) {
+      query.andWhere('game.name = :gameName', { gameName: filters.game });
+    }
+
+    if (filters.category) {
+      query.andWhere('product.category = :category', { category: filters.category });
+    }
+
+    // Ordenamos para una vista consistente, por ejemplo, por nombre.
+    query.orderBy('product.name', 'ASC');
+
+    return query.getMany();
   }
-
-  if (filters.category) {
-    query.andWhere('product.category = :category', { category: filters.category });
-  }
-
-  // Ordenamos para una vista consistente, por ejemplo, por nombre.
-  query.orderBy('product.name', 'ASC');
-
-  return query.getMany();
-}
 
 
   async findOne(id: number): Promise<Product> {
-    const product = await this.productRepo.findOne({  
+    const product = await this.productRepo.findOne({
       where: { id },
       relations: ['brand', 'edition', 'game'],
     });
@@ -137,62 +187,62 @@ async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product>
     return product;
   }
 
-async update(id: number, dto: UpdateProductDto, file?: Express.Multer.File): Promise<Product> {
-  // 1. Usamos 'preload' para cargar el producto y fusionar los datos simples del DTO
-  const product = await this.productRepo.preload({
-    id,
-    ...dto,
-  });
-  if (!product) {
-    throw new NotFoundException(`Producto con ID ${id} no encontrado`);
-  }
-
-  // 2. Si se subió un nuevo archivo, actualizamos la URL de la imagen
-  if (file) {
-    product.imageUrl = `/uploads/${file.filename}`;
-  }
-
-  // ✅ 3. Manejamos las relaciones si vienen en el DTO
-  if (dto.brandId) {
-    const brand = await this.brandRepo.findOneBy({ id: dto.brandId });
-    if (!brand) throw new NotFoundException(`Marca con ID ${dto.brandId} no encontrada`);
-    product.brand = brand;
-  }
-  
-  if (dto.gameId) {
-    const game = await this.gameRepo.findOneBy({ id: dto.gameId });
-    if (!game) throw new NotFoundException(`Juego con ID ${dto.gameId} no encontrado`);
-    product.game = game;
-  } else if (dto.gameId === null) { // Permite desasociar un juego
-    product.game = null;
-  }
-
-  if (dto.editionId) {
-    const edition = await this.editionRepo.findOneBy({ id: dto.editionId });
-    if (!edition) throw new NotFoundException(`Edición con ID ${dto.editionId} no encontrada`);
-    product.edition = edition;
-  } else if (dto.editionId === null) { // Permite desasociar una edición
-    product.edition = null;
-  }
-
-  // 4. Guardamos el producto con todas sus relaciones actualizadas
-  return this.productRepo.save(product);
-}
-
-
-
-async replenishStock(items: OrderItem[]): Promise<void> {
-  await this.entityManager.transaction(async transactionalEntityManager => {
-    for (const item of items) {
-      await transactionalEntityManager.increment(
-        Product,
-        { id: item.product.id },
-        'stock',
-        item.quantity
-      );
+  async update(id: number, dto: UpdateProductDto, file?: Express.Multer.File): Promise<Product> {
+    // 1. Usamos 'preload' para cargar el producto y fusionar los datos simples del DTO
+    const product = await this.productRepo.preload({
+      id,
+      ...dto,
+    });
+    if (!product) {
+      throw new NotFoundException(`Producto con ID ${id} no encontrado`);
     }
-  });
-}
+
+    // 2. Si se subió un nuevo archivo, actualizamos la URL de la imagen
+    if (file) {
+      product.imageUrl = `/uploads/${file.filename}`;
+    }
+
+    // ✅ 3. Manejamos las relaciones si vienen en el DTO
+    if (dto.brandId) {
+      const brand = await this.brandRepo.findOneBy({ id: dto.brandId });
+      if (!brand) throw new NotFoundException(`Marca con ID ${dto.brandId} no encontrada`);
+      product.brand = brand;
+    }
+
+    if (dto.gameId) {
+      const game = await this.gameRepo.findOneBy({ id: dto.gameId });
+      if (!game) throw new NotFoundException(`Juego con ID ${dto.gameId} no encontrado`);
+      product.game = game;
+    } else if (dto.gameId === null) { // Permite desasociar un juego
+      product.game = null;
+    }
+
+    if (dto.editionId) {
+      const edition = await this.editionRepo.findOneBy({ id: dto.editionId });
+      if (!edition) throw new NotFoundException(`Edición con ID ${dto.editionId} no encontrada`);
+      product.edition = edition;
+    } else if (dto.editionId === null) { // Permite desasociar una edición
+      product.edition = null;
+    }
+
+    // 4. Guardamos el producto con todas sus relaciones actualizadas
+    return this.productRepo.save(product);
+  }
+
+
+
+  async replenishStock(items: OrderItem[]): Promise<void> {
+    await this.entityManager.transaction(async transactionalEntityManager => {
+      for (const item of items) {
+        await transactionalEntityManager.increment(
+          Product,
+          { id: item.product.id },
+          'stock',
+          item.quantity
+        );
+      }
+    });
+  }
 
   async findRandom(limit: number): Promise<Product[]> {
     // 1. Obtenemos solo los IDs de productos aleatorios.
@@ -223,10 +273,10 @@ async replenishStock(items: OrderItem[]): Promise<void> {
     await this.productRepo.remove(product);
   }
 
-    /**
-   * ✅ 3. NUEVO MÉTODO para descontar el stock
-   * Utiliza una transacción para asegurar la consistencia de los datos.
-   */
+  /**
+ * ✅ 3. NUEVO MÉTODO para descontar el stock
+ * Utiliza una transacción para asegurar la consistencia de los datos.
+ */
   async deductStock(items: OrderItem[]): Promise<void> {
     await this.entityManager.transaction(async transactionalEntityManager => {
       for (const item of items) {
@@ -250,7 +300,7 @@ async replenishStock(items: OrderItem[]): Promise<void> {
   }
 
 
-async bulkCreate(fileBuffer) {
+  async bulkCreate(fileBuffer) {
     const workbook = new Workbook();
     await workbook.xlsx.load(fileBuffer);
     const worksheet = workbook.getWorksheet('Plantilla Productos');
@@ -315,7 +365,7 @@ async bulkCreate(fileBuffer) {
         errors.push({ row: rowNumber, message: `La marca '${rowData.brandName}' no fue encontrada.` });
         continue;
       }
-      
+
       let game: Game | undefined;
       if (rowData.gameName) {
         game = gameMap.get(rowData.gameName);
@@ -367,7 +417,7 @@ async bulkCreate(fileBuffer) {
     if (errors.length > 0) {
       throw new BadRequestException({ message: 'Se encontraron errores en el archivo Excel.', errors });
     }
-    
+
     // --- Guardar en una transacción ---
     try {
       await this.entityManager.transaction(async transactionalEntityManager => {
@@ -379,7 +429,7 @@ async bulkCreate(fileBuffer) {
     }
   }
 
-async findByIds(ids: number[]): Promise<Product[]> {
+  async findByIds(ids: number[]): Promise<Product[]> {
     if (!ids || ids.length === 0) {
       return []; // Devuelve un arreglo vacío si no se proporcionan IDs
     }

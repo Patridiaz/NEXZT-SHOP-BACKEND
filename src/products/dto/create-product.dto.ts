@@ -21,9 +21,9 @@ export class CreateProductDto {
   @IsNotEmpty()
   name: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  description?: string;
 
   @IsEnum(ProductCategory)
   @IsNotEmpty()
@@ -65,4 +65,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductRarity)
   rarity?: ProductRarity;
+
+  @IsOptional()
+  @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))
+  @IsInt()
+  @Min(1)
+  purchaseLimit?: number;
 }

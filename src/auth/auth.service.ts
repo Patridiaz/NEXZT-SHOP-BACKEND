@@ -43,7 +43,10 @@ export class AuthService {
     const payload = { 
       sub: user.id, 
       email: user.email, 
-      role: user.role // Asegúrate de que tu entidad User tenga 'role' y no 'roles'
+      role: user.role, // Asegúrate de que tu entidad User tenga 'role' y no 'roles'}
+      name: user.name,
+      rut: user.rut
+
     };
     
     // ✅ CORRECCIÓN: Devuelve tanto el token como el objeto 'user'
@@ -92,7 +95,10 @@ async registerFromGuest(dto: RegisterFromGuestDto) {
   // 5. Devuelve un mensaje de éxito
   return { message: 'Cuenta creada exitosamente. Ya puedes iniciar sesión.' };
 }  
-   async register(dto: CreateUserDto): Promise<Omit<User, 'password'>> {
+
+
+// ✅ Registro estándar (ahora el registro desde checkout lo maneja OrdersService)
+  async register(dto: CreateUserDto): Promise<Omit<User, 'password'>> {
     // 1. Verifica si el email ya existe
     const existingUser = await this.userRepo.findOneBy({ email: dto.email });
     if (existingUser) {
@@ -107,7 +113,8 @@ async registerFromGuest(dto: RegisterFromGuestDto) {
       name: dto.name,
       email: dto.email,
       password: hashedPassword,
-      // El rol por defecto ya está en la entidad, así que no es necesario aquí.
+      // Si el DTO de CreateUser lo permite, asignamos los extras
+      // (Asegúrate de que CreateUserDto tenga rut, phone, etc. si quieres que register normal los acepte)
     });
     
     const savedUser = await this.userRepo.save(newUser);

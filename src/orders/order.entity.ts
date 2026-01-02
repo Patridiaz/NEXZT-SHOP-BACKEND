@@ -1,22 +1,21 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn } from 'typeorm';
 import { User } from '../users/user.entity';
 import { OrderItem } from './order-item.entity';
+import { Region } from '../locations/region.entity';
+import { Commune } from '../locations/commune.entity';
 
 export enum OrderStatus {
   PENDING = 'PENDIENTE',
   PAID = 'PAGADO',
-  SHIPPED = 'ENVIADO',
-  DELIVERED = 'ENTREGADO',
   CANCELLED = 'CANCELADO',
 }
 
-// ✅ NUEVO: Estado Logístico
 export enum DeliveryStatus {
-  PREPARING = 'PREPARING',             // Inicial / En preparación
-  READY_FOR_PICKUP = 'READY_FOR_PICKUP', // Listo para retiro en tienda
-  DISPATCHED = 'DISPATCHED',           // Despachado (entregado al courier)
-  SHIPPED = 'SHIPPED',                 // Enviado / En tránsito
-  DELIVERED = 'DELIVERED',             // Entregado al cliente
+  PREPARING = 'PREPARING',
+  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
+  DISPATCHED = 'DISPATCHED',
+  SHIPPED = 'SHIPPED',
+  DELIVERED = 'DELIVERED',
 }
 
 @Entity()
@@ -24,23 +23,35 @@ export class Order {
   @PrimaryGeneratedColumn()
   id: number;
 
+  // ... (Relaciones de User, GuestEmail, etc. siguen igual)
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   user: User | null;
 
   @Column({ type: 'int', nullable: true })
   userId: number | null;
   
-  // ✅ CORRECCIÓN: Se cambia el tipo a 'string | null'
-  @Column({  type: 'varchar', nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   guestEmail: string | null;
 
   @Column({ nullable: true })
-  shippingAddress: string ;
+  shippingAddress: string;
+
+  // Relaciones de Ubicación
+  @ManyToOne(() => Region, { nullable: true })
+  region: Region;
+
+  @ManyToOne(() => Commune, { nullable: true })
+  commune: Commune;
 
   @OneToMany(() => OrderItem, item => item.order, { cascade: true, eager: true })
   items: OrderItem[];
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  // ✅ NUEVA COLUMNA: Costo de Envío
+  @Column('decimal', { precision: 10, scale: 0, default: 0 })
+  shippingCost: number;
+
+  // El total incluirá (Suma Productos + Costo Envío)
+  @Column('decimal', { precision: 10, scale: 0 })
   total: number;
 
   @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.PENDING })
@@ -49,7 +60,7 @@ export class Order {
   @CreateDateColumn()
   createdAt: Date;
 
-  @Column()
+  @Column({ nullable: true })
   expiresAt: Date;
 
   @Column({ 

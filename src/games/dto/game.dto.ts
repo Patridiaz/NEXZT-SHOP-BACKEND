@@ -1,20 +1,27 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateGameDto {
   @IsNotEmpty()
+  @IsString()
   name: string;
 
-  @IsNotEmpty()
-  showInNavbar: boolean;
+  // ✅ CORRECCIÓN:
+  // 1. @IsOptional(): Si no lo envías, la base de datos usará el 'default: false'
+  // 2. @IsBoolean(): Valida que sea true/false y no un string
+  @IsOptional()
+  @IsBoolean()
+  showInNavbar?: boolean;
 }
 
 export class UpdateGameDto {
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @IsOptional()
-  name: string;
+  name?: string;
 
-  @IsNotEmpty()
+  // ✅ CORRECCIÓN:
+  // Igual aquí, quitamos IsNotEmpty porque ya es opcional
   @IsOptional()
-  showInNavbar: boolean;
+  @IsBoolean()
+  showInNavbar?: boolean;
 }

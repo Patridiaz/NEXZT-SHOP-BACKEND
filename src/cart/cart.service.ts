@@ -13,10 +13,10 @@ export class CartService {
     @InjectRepository(GuestCartItem) private guestCartItemRepo: Repository<GuestCartItem>,
     @InjectRepository(Product) private productRepo: Repository<Product>,
     @InjectRepository(User) private userRepo: Repository<User>,
-  ) {}
+  ) { }
 
 
-// --- MÉTODOS PÚBLICOS ---
+  // --- MÉTODOS PÚBLICOS ---
 
   async addItem(data: { userId?: number; guestCartId?: string; productId: number; quantity: number }) {
     const { userId, guestCartId, productId, quantity } = data;
@@ -26,11 +26,11 @@ export class CartService {
     if (userId) {
       const user = await this.findUser(userId);
       return this.handleUserCartItem(user, product, quantity);
-    } 
+    }
     if (guestCartId) {
       return this.handleGuestCartItem(guestCartId, product, quantity);
     }
-    
+
     throw new BadRequestException('Se requiere identificación de usuario o de invitado.');
   }
 
@@ -40,7 +40,7 @@ export class CartService {
         where: { user: { id: userId } },
         relations: ['product', 'product.brand'],
       });
-    } 
+    }
     if (guestCartId) {
       return this.guestCartItemRepo.find({
         where: { guestId: guestCartId },
@@ -50,14 +50,14 @@ export class CartService {
     return [];
   }
 
-private async handleUserCartItem(user: User, product: Product, quantityToAdd: number) {
+  private async handleUserCartItem(user: User, product: Product, quantityToAdd: number) {
     // ✅ INICIO: LÓGICA DE LÍMITE DE 6 ITEMS PARA USUARIOS
     const userCartItems = await this.cartItemRepo.find({ where: { user: { id: user.id } } });
     const currentTotalQuantity = userCartItems.reduce((sum, item) => sum + item.quantity, 0);
 
     if (currentTotalQuantity + quantityToAdd > 6) {
       throw new BadRequestException(
-        `No puedes tener más de 6 items en tu carrito. Actualmente tienes ${currentTotalQuantity}.`
+        `No puedes tener más de 6 items en tu carrito. Actualmente tienes ${currentTotalQuantity}.`,
       );
     }
     // ✅ FIN: LÓGICA DE LÍMITE
@@ -67,6 +67,13 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     });
 
     const newQuantity = (cartItem ? cartItem.quantity : 0) + quantityToAdd;
+
+    if (product.purchaseLimit && newQuantity > product.purchaseLimit) {
+      throw new BadRequestException(
+        `No puedes comprar más de ${product.purchaseLimit} unidades de '${product.name}'.`,
+      );
+    }
+
     if (product.stock < newQuantity) {
       throw new BadRequestException(`Stock insuficiente para '${product.name}'.`);
     }
@@ -74,8 +81,8 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     if (cartItem) {
       cartItem.quantity = newQuantity;
       return this.cartItemRepo.save(cartItem);
-    } 
-      
+    }
+
     const newCartItem = this.cartItemRepo.create({ user, product, quantity: quantityToAdd });
     return this.cartItemRepo.save(newCartItem);
   }
@@ -87,7 +94,7 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
 
     if (currentTotalQuantity + quantityToAdd > 6) {
       throw new BadRequestException(
-        `No puedes tener más de 6 items en tu carrito. Actualmente tienes ${currentTotalQuantity}.`
+        `No puedes tener más de 6 items en tu carrito. Actualmente tienes ${currentTotalQuantity}.`,
       );
     }
     // ✅ FIN: LÓGICA DE LÍMITE
@@ -97,6 +104,13 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     });
 
     const newQuantity = (cartItem ? cartItem.quantity : 0) + quantityToAdd;
+
+    if (product.purchaseLimit && newQuantity > product.purchaseLimit) {
+      throw new BadRequestException(
+        `No puedes comprar más de ${product.purchaseLimit} unidades de '${product.name}'.`,
+      );
+    }
+
     if (product.stock < newQuantity) {
       throw new BadRequestException(`Stock insuficiente para '${product.name}'.`);
     }
@@ -104,12 +118,12 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     if (cartItem) {
       cartItem.quantity = newQuantity;
       return this.guestCartItemRepo.save(cartItem);
-    } 
-      
+    }
+
     const newCartItem = this.guestCartItemRepo.create({ guestId, product, quantity: quantityToAdd });
     return this.guestCartItemRepo.save(newCartItem);
   }
-  
+
   private async findProduct(id: number): Promise<Product> {
     const product = await this.productRepo.findOneBy({ id });
     if (!product) {
@@ -117,7 +131,7 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     }
     return product;
   }
-  
+
   private async findUser(id: number): Promise<User> {
     const user = await this.userRepo.findOneBy({ id });
     if (!user) {
@@ -135,7 +149,7 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     const cartItem = await this.cartItemRepo.findOne({
       where: { user: { id: userId }, product: { id: productId } }
     });
-    
+
     if (cartItem) {
       await this.cartItemRepo.remove(cartItem);
     } else {
@@ -144,7 +158,7 @@ private async handleUserCartItem(user: User, product: Product, quantityToAdd: nu
     }
 
     return this.getCart(userId);
-}
+  }
 
 
   // Vaciar todo el carrito

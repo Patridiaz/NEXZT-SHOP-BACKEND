@@ -16,6 +16,7 @@ import { EventsModule } from './events/events.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { DashboardModule } from './admin/dashboard/dashboard.module';
+import { LocationsModule } from './locations/locations.module';
 
 @Module({
   imports: [
@@ -50,7 +51,8 @@ import { DashboardModule } from './admin/dashboard/dashboard.module';
     EditionsModule,
     ScheduleModule.forRoot(),
     EventsModule,
-    DashboardModule
+    DashboardModule,
+    LocationsModule,
   ],
     providers: [
     {

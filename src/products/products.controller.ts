@@ -19,9 +19,9 @@ export class ProductController {
   constructor(
     private readonly productService: ProductService,
     private readonly excelService: ExcelService,
-  ) {}
+  ) { }
 
-@Post()
+  @Post()
   @UseInterceptors(FileInterceptor('file', multerOptions))
   create(
     @UploadedFile() file: Express.Multer.File, // 👈 Inyectar el archivo
@@ -33,7 +33,7 @@ export class ProductController {
 
 
   @Public()
-   @Get()
+  @Get()
   findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
@@ -44,8 +44,10 @@ export class ProductController {
     @Query('order') order?: 'ASC' | 'DESC',
     @Query('brandId', new ParseIntPipe({ optional: true })) brandId?: number,
     @Query('gameId', new ParseIntPipe({ optional: true })) gameId?: number,
-    
+    @Query('editionId', new ParseIntPipe({ optional: true })) editionId?: number,
     @Query('rarity') rarity?: ProductRarity,
+    @Query('code') code?: string,
+    @Query('name') name?: string,
   ) {
     return this.productService.findAll({
       page,
@@ -55,9 +57,12 @@ export class ProductController {
       game,
       brandId,
       gameId,
+      editionId,
       rarity,
-      sort,  
-      order,    
+      sort,
+      order,
+      code,
+      name,
     });
   }
   @Public()
@@ -86,13 +91,13 @@ export class ProductController {
     return product;
   }
 
-// ✅ MÉTODO DE ACTUALIZACIÓN CORREGIDO
-@Patch(':id')
+  // ✅ MÉTODO DE ACTUALIZACIÓN CORREGIDO
+  @Patch(':id')
   @UseInterceptors(FileInterceptor('file', multerOptions)) // <-- Usa la misma variable
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateProductDto: UpdateProductDto,
-    @UploadedFile() file?: Express.Multer.File, 
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.productService.update(id, updateProductDto, file);
   }
@@ -101,8 +106,8 @@ export class ProductController {
   remove(@Param('id') id: string) {
     return this.productService.remove(+id);
   }
-  
- // --- Endpoints de Carga Masiva ---
+
+  // --- Endpoints de Carga Masiva ---
   @Get('bulk/template')
   async downloadTemplate(@Res() res: Response) {
     const buffer = await this.excelService.generateProductTemplate();
@@ -125,9 +130,9 @@ export class ProductController {
   ) {
     return this.productService.bulkCreate(file.buffer);
   }
-  
+
   @Public()
-  @Post('by-ids') 
+  @Post('by-ids')
   findByIds(@Body() body: GetProductsByIdsDto): Promise<Product[]> {
     return this.productService.findByIds(body.ids);
   }

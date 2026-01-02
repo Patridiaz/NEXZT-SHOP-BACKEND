@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, ParseIntPipe } from '@nestjs/common';
 import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import { Brand } from './brand.entity';
 import { BrandsService } from './brands.service';
@@ -6,7 +6,7 @@ import { Public } from 'src/auth/public.decorator';
 
 @Controller('brands')
 export class BrandsController {
-  constructor(private readonly brandService: BrandsService) {}
+  constructor(private readonly brandService: BrandsService) { }
 
   @Post()
   create(@Body() dto: CreateBrandDto): Promise<Brand> {
@@ -23,17 +23,17 @@ export class BrandsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: number): Promise<Brand> {
+  findOne(@Param('id', ParseIntPipe) id: number): Promise<Brand> {
     return this.brandService.findOne(id);
   }
 
   @Put(':id')
-  update(@Param('id') id: number, @Body() dto: UpdateBrandDto): Promise<Brand> {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateBrandDto): Promise<Brand> {
     return this.brandService.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: number): Promise<void> {
+  remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.brandService.remove(id);
   }
 }

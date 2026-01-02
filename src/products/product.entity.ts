@@ -15,10 +15,10 @@ export class Product {
   @Column()
   name: string;
 
-  @Column()
+  @Column({ nullable: true })
   description: string;
 
-   // ✅ NUEVO CAMPO DE CATEGORÍA
+  // ✅ NUEVO CAMPO DE CATEGORÍA
   @Column({
     type: 'enum',
     enum: ProductCategory,
@@ -29,7 +29,7 @@ export class Product {
   @Column({ type: 'varchar', nullable: true })
   imageUrl: string;
 
-  
+
   @Column('decimal', { precision: 10, scale: 2 })
   price: number;
 
@@ -39,7 +39,7 @@ export class Product {
   @Column('int')
   stock: number;
 
-  @ManyToOne(() => Brand, (brand) => brand.products, { nullable: false})
+  @ManyToOne(() => Brand, (brand) => brand.products, { nullable: false })
   @JoinColumn({ name: 'brandId' })
   brand: Brand;
 
@@ -48,7 +48,7 @@ export class Product {
   @JoinColumn({ name: 'game_id' })
   game: Game | null;
 
-  @ManyToOne(() => Edition, (edition) => edition.products ,{ nullable: true})
+  @ManyToOne(() => Edition, (edition) => edition.products, { nullable: true })
   @JoinColumn({ name: 'edition_id' })
   edition: Edition | null;
 
@@ -58,4 +58,7 @@ export class Product {
     nullable: true, // ✅ Permite que productos antiguos no tengan rareza
   })
   rarity: ProductRarity;
+
+  @Column({ type: 'int', nullable: true })
+  purchaseLimit: number | null;
 }

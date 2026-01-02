@@ -17,6 +17,21 @@ export class Event {
   @Column()
   imageUrl: string;
 
+  @Column({ nullable: true })
+  location: string;
+
+  @Column({ nullable: true })
+  address: string;
+
+  @Column('decimal', { precision: 10, scale: 7, nullable: true })
+  latitude: number;
+
+  @Column('decimal', { precision: 10, scale: 7, nullable: true })
+  longitude: number;
+
+  @Column({ nullable: true })
+  placeId: string;
+
   @Column({ default: false })
   isFeatured: boolean;
 

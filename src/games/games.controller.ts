@@ -6,13 +6,13 @@ import { Public } from 'src/auth/public.decorator';
 
 @Controller('games')
 export class GamesController {
-  constructor(private readonly gameService: GamesService) {}
+  constructor(private readonly gameService: GamesService) { }
 
   @Post()
   create(@Body() dto: CreateGameDto): Promise<Game> {
     return this.gameService.create(dto);
   }
-  
+
   @Public()
   @Get('all')
   findAllSimple() {
@@ -25,20 +25,20 @@ export class GamesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: number): Promise<Game> {
+  findOne(@Param('id', ParseIntPipe) id: number): Promise<Game> {
     return this.gameService.findOne(id);
   }
 
-  @Patch(':id') 
-    update(
-      @Param('id', ParseIntPipe) id: number, 
-      @Body() updateGameDto: UpdateGameDto
-    ) {
-      return this.gameService.update(id, updateGameDto);
-    }
+  @Patch(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateGameDto: UpdateGameDto
+  ) {
+    return this.gameService.update(id, updateGameDto);
+  }
 
   @Delete(':id')
-  remove(@Param('id') id: number): Promise<void> {
+  remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.gameService.remove(id);
   }
 
@@ -46,7 +46,7 @@ export class GamesController {
   @Get('navbar/list')
   getNavbarGames() {
     // Llama a una función en tu servicio
-    return this.gameService.findForNavbar(); 
+    return this.gameService.findForNavbar();
   }
 
 
