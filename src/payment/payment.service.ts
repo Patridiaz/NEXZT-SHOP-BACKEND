@@ -19,19 +19,19 @@ export class PaymentService {
     @InjectRepository(PaymentTransaction) private transactionRepo: Repository<PaymentTransaction>,
     @InjectRepository(Order) private orderRepo: Repository<Order>,
     private readonly productService: ProductService,
-  ) {}
-  
-private buildSignature(params: Record<string, string>): string {
-  const sortedKeys = Object.keys(params).sort();
-  const stringToSign = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+  ) { }
+
+  private buildSignature(params: Record<string, string>): string {
+    const sortedKeys = Object.keys(params).sort();
+    const stringToSign = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
 
 
-  return crypto.createHmac('sha256', this.secretKey).update(stringToSign).digest('hex');
-}
+    return crypto.createHmac('sha256', this.secretKey).update(stringToSign).digest('hex');
+  }
 
-async createPayment(orderId: number) {
+  async createPayment(orderId: number) {
     this.logger.log(`Iniciando creación de pago para la orden ID: ${orderId}`);
-    
+
     const order = await this.orderRepo.findOne({ where: { id: orderId }, relations: ['user'] });
     if (!order) {
       throw new HttpException(`Orden con ID ${orderId} no encontrada`, HttpStatus.NOT_FOUND);
@@ -52,7 +52,7 @@ async createPayment(orderId: number) {
       urlConfirmation: this.confirmUrl,
       urlReturn: process.env.FLOW_RETURN_URL!,
     };
-    
+
     // ✅ OBTENEMOS EL EMAIL REAL (SI EXISTE)
     const customerEmail = order.user?.email || order.guestEmail;
 
@@ -71,7 +71,7 @@ async createPayment(orderId: number) {
 
     const signature = this.buildSignature(params);
     const body = new URLSearchParams({ ...params, s: signature }).toString();
-    
+
     try {
       const { data } = await axios.post(`${this.baseUrl}/payment/create`, body, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
@@ -95,7 +95,7 @@ async createPayment(orderId: number) {
       throw new HttpException('Error al crear el pago en Flow', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
- 
+
   async confirmPayment(body: { token: string }) {
     this.logger.log(`--- Iniciando Confirmación de Pago para el token: ${body.token} ---`);
     const { token } = body;
@@ -109,9 +109,9 @@ async createPayment(orderId: number) {
       }
       const orderId = parseInt(matches[1], 10);
       const order = await this.orderRepo.findOne({ where: { id: orderId }, relations: ['items', 'items.product'] });
-      
+
       if (!order) throw new HttpException(`Orden con ID ${orderId} no encontrada`, HttpStatus.NOT_FOUND);
-      if (order.status === OrderStatus.PAID) { 
+      if (order.status === OrderStatus.PAID) {
         this.logger.log(`La orden ${orderId} ya fue procesada.`);
         return { message: 'OK, already-processed' };
       }
@@ -122,22 +122,22 @@ async createPayment(orderId: number) {
       } else { // 3 = rechazada, 4 = anulada
         newStatus = OrderStatus.CANCELLED;
       }
-      
+
       this.logger.log(`Nuevo estado para la orden ${orderId}: ${newStatus}`);
 
       if (newStatus === OrderStatus.PAID && order.status === OrderStatus.PENDING) {
-          
-          // ✅ 1. AÑADE ESTA LÍNEA: Descontamos el stock SÓLO si el pago es exitoso.
-          await this.productService.deductStock(order.items); 
-          this.logger.log(`Orden ${orderId} pagada. Stock descontado.`);
 
-        } else if (newStatus === OrderStatus.CANCELLED && order.status === OrderStatus.PENDING) {
-          
-          // ✅ 2. BORRA ESTA LÍNEA: Ya no reponemos stock, porque nunca se descontó.
-          // await this.productService.replenishStock(order.items); 
-          this.logger.log(`Pago fallido/anulado. No se hace nada con el stock.`);
-        }
-      
+        // ✅ 1. AÑADE ESTA LÍNEA: Descontamos el stock SÓLO si el pago es exitoso.
+        await this.productService.deductStock(order.items);
+        this.logger.log(`Orden ${orderId} pagada. Stock descontado.`);
+
+      } else if (newStatus === OrderStatus.CANCELLED && order.status === OrderStatus.PENDING) {
+
+        // ✅ 2. BORRA ESTA LÍNEA: Ya no reponemos stock, porque nunca se descontó.
+        // await this.productService.replenishStock(order.items); 
+        this.logger.log(`Pago fallido/anulado. No se hace nada con el stock.`);
+      }
+
       order.status = newStatus;
       await this.orderRepo.save(order);
       await this.transactionRepo.update({ token }, { status: newStatus });
@@ -150,16 +150,16 @@ async createPayment(orderId: number) {
       throw err;
     }
   }
- 
+
   async getPaymentDetails(token: string) {
     const params = { apiKey: this.apiKey, token };
     const signature = this.buildSignature(params);
-    
+
     const url = new URL(`${this.baseUrl}/payment/getStatus`);
     url.searchParams.append('apiKey', params.apiKey);
     url.searchParams.append('token', params.token);
     url.searchParams.append('s', signature);
-    
+
     try {
       const { data } = await axios.get(url.toString());
       return data;
@@ -167,5 +167,12 @@ async createPayment(orderId: number) {
       this.logger.error('Error en getPaymentDetails:', err.response?.data || err.message);
       throw new HttpException('Error al consultar estado de pago en Flow', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  async getTransactionByToken(token: string) {
+    return this.transactionRepo.findOne({
+      where: { token },
+      relations: ['order', 'order.items', 'order.items.product'],
+    });
   }
 }
