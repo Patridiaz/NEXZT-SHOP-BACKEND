@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Res, Logger } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { Public } from 'src/auth/public.decorator';
 
 @Controller('checkout')
