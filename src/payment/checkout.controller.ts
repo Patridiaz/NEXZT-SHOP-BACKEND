@@ -2,20 +2,31 @@
 import { Controller, Get, Query, Res, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { Public } from 'src/auth/public.decorator';
+import { PaymentService } from './payment.service';
 
 @Controller('checkout')
 export class CheckoutController {
-  private readonly logger = new Logger(CheckoutController.name);
+    private readonly logger = new Logger(CheckoutController.name);
 
-  @Public()
-  @Get('success')
-  async handleSuccess(@Query('token') token: string, @Res() res: Response) {
-    this.logger.log(`✅ PAGO EXITOSO - Mostrando pantalla final. Token: ${token}`);
+    constructor(private readonly paymentService: PaymentService) { }
 
-    // 🛑 IMPORTANTE: AQUÍ ELIMINAMOS LA REDIRECCIÓN (res.redirect)
-    // En su lugar, enviamos el HTML directamente al navegador.
-    
-    const htmlContent = `
+    @Public()
+    @Get('success')
+    async handleSuccess(@Query('token') token: string, @Res() res: Response) {
+        this.logger.log(`✅ PAGO EXITOSO - Mostrando pantalla final. Token: ${token}`);
+
+        if (token) {
+            try {
+                // Forzamos la confirmación del pago al aterrizar en éxito
+                // por si el webhook se retrasa o falla.
+                await this.paymentService.confirmPayment({ token });
+                this.logger.log(`Orden confirmada para el token: ${token}`);
+            } catch (error) {
+                this.logger.error(`Error al confirmar orden para token ${token} en landing:`, error.message);
+            }
+        }
+
+        const htmlContent = `
       <!DOCTYPE html>
       <html lang="es">
       <head>
@@ -46,20 +57,18 @@ export class CheckoutController {
       </html>
     `;
 
-    // Respondemos con código 200 y el HTML
-    return res.status(200).send(htmlContent);
-  }
+        return res.status(200).send(htmlContent);
+    }
 
-  @Public()
-  @Get('cancel')
-  async handleCancel(@Res() res: Response) {
-      // Pantalla simple de cancelación
-      return res.status(200).send(`
+    @Public()
+    @Get('cancel')
+    async handleCancel(@Res() res: Response) {
+        return res.status(200).send(`
           <div style="text-align:center; padding:50px; font-family:sans-serif;">
               <h1 style="color: #e74c3c;">Pago Cancelado</h1>
               <p>Has cancelado el proceso de pago.</p>
               <a href="https://nextz.nextz.cl">Volver a intentar</a>
           </div>
       `);
-  }
+    }
 }
