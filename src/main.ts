@@ -9,6 +9,8 @@ import cookieParser from 'cookie-parser';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  app.set('trust proxy', 1);
+
   // Configuración de CORS, archivos estáticos, etc.
   app.enableCors({
     origin: '*', // Permite cualquier origen (para desarrollo)
