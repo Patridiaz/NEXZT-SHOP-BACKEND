@@ -10,6 +10,7 @@ import { Product } from 'src/products/product.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Region } from 'src/locations/region.entity';
 import { Commune } from 'src/locations/commune.entity';
+import { MailService } from 'src/mail/mail.service';
 import * as bcrypt from 'bcrypt'; // ✅ Importamos bcrypt para hashear passwords
 
 @Injectable()
@@ -21,6 +22,7 @@ export class OrdersService {
     private entityManager: EntityManager,
     @InjectRepository(Region) private regionRepo: Repository<Region>,
     @InjectRepository(Commune) private communeRepo: Repository<Commune>,
+    private mailService: MailService,
   ) { }
 
   async createOrder(dto: CreateOrderDto, userId?: number): Promise<Order> {
@@ -237,6 +239,17 @@ export class OrdersService {
     const order = await this.ordersRepo.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Orden no encontrada');
     order.deliveryStatus = status;
-    return this.ordersRepo.save(order);
+    const savedOrder = await this.ordersRepo.save(order);
+
+    // Cargar usuario para obtener email
+    const fullOrder = await this.ordersRepo.findOne({ where: { id: orderId }, relations: ['user'] });
+    const userEmail = fullOrder?.user?.email || fullOrder?.guestEmail;
+    const userName = fullOrder?.user?.name || 'Cliente';
+
+    if (userEmail) {
+      this.mailService.sendOrderStatusUpdateEmail(userEmail, userName, order.id, status).catch(() => { });
+    }
+
+    return savedOrder;
   }
 }

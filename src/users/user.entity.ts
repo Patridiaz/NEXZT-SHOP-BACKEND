@@ -21,7 +21,7 @@ export class User {
   password: string;
 
   // ✅ NUEVOS CAMPOS (Opcionales para el registro)
-  @Column({ type: 'varchar',nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   rut: string | null;
 
   @Column({ type: 'varchar', nullable: true })
@@ -43,4 +43,7 @@ export class User {
     default: UserRole.CUSTOMER,
   })
   role: UserRole;
+
+  @Column({ default: true })
+  isActive: boolean;
 }

@@ -17,6 +17,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { DashboardModule } from './admin/dashboard/dashboard.module';
 import { LocationsModule } from './locations/locations.module';
+import { CarouselModule } from './carousel/carousel.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -53,12 +55,14 @@ import { LocationsModule } from './locations/locations.module';
     EventsModule,
     DashboardModule,
     LocationsModule,
+    CarouselModule,
+    MailModule,
   ],
-    providers: [
+  providers: [
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

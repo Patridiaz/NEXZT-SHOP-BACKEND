@@ -9,21 +9,38 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-  ) {}
+  ) { }
 
-async create(name: string, email: string, password: string, role: UserRole = UserRole.CUSTOMER): Promise<User> {
-  const hashed = await bcrypt.hash(password, 10);
-  const user = this.usersRepository.create({ name, email, password: hashed, role });
-  return this.usersRepository.save(user);
-}
+  async create(name: string, email: string, password: string, role: UserRole = UserRole.CUSTOMER): Promise<User> {
+    const hashed = await bcrypt.hash(password, 10);
+    const user = this.usersRepository.create({ name, email, password: hashed, role });
+    return this.usersRepository.save(user);
+  }
 
 
-async findByEmail(email: string): Promise<User | null> {
-  return this.usersRepository.findOne({ where: { email } });
-}
+  async findByEmail(email: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { email } });
+  }
 
 
   async findById(id: number): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
+  }
+
+  async findAll(): Promise<User[]> {
+    return this.usersRepository.find({
+      order: { id: 'DESC' }
+    });
+  }
+
+  async update(id: number, data: Partial<User>): Promise<User | null> {
+    const updateData = { ...data };
+
+    if (updateData.password) {
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    }
+
+    await this.usersRepository.update(id, updateData);
+    return this.findById(id);
   }
 }

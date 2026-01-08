@@ -6,6 +6,7 @@ import { Order, OrderStatus } from 'src/orders/order.entity';
 import { PaymentTransaction } from './PaymentTransaction.entity';
 import * as crypto from 'crypto';
 import { ProductService } from 'src/products/products.service';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class PaymentService {
@@ -19,6 +20,7 @@ export class PaymentService {
     @InjectRepository(PaymentTransaction) private transactionRepo: Repository<PaymentTransaction>,
     @InjectRepository(Order) private orderRepo: Repository<Order>,
     private readonly productService: ProductService,
+    private readonly mailService: MailService,
   ) { }
 
   private buildSignature(params: Record<string, string>): string {
@@ -141,6 +143,14 @@ export class PaymentService {
       order.status = newStatus;
       await this.orderRepo.save(order);
       await this.transactionRepo.update({ token }, { status: newStatus });
+
+      if (newStatus === OrderStatus.PAID) {
+        const userEmail = order.user?.email || order.guestEmail;
+        const userName = order.user?.name || 'Cliente';
+        if (userEmail) {
+          this.mailService.sendOrderPaidEmail(userEmail, userName, order.id, order.total).catch(() => { });
+        }
+      }
 
       this.logger.log(`--- Confirmación para orden ${orderId} finalizada ---`);
       return { message: 'OK' };
