@@ -10,19 +10,20 @@ import { RolesGuard } from './roles.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RegisterFromGuestDto } from './dto/register-from-guest.dto';
 import { Public } from './public.decorator';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/recovery.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
-  ) {}
+  ) { }
 
-    @Public()
-    @Post('register')
-    async register(@Body() dto: CreateUserDto) {
-      // ✅ CORRECCIÓN 2: Toda la lógica se delega al servicio.
-      return this.authService.register(dto);
-    }
+  @Public()
+  @Post('register')
+  async register(@Body() dto: CreateUserDto) {
+    // ✅ CORRECCIÓN 2: Toda la lógica se delega al servicio.
+    return this.authService.register(dto);
+  }
 
   @Public()
   @Post('login')
@@ -50,5 +51,16 @@ export class AuthController {
   registerFromGuest(@Body() dto: RegisterFromGuestDto) {
     return this.authService.registerFromGuest(dto);
   }
-  
+
+  @Public()
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
 }

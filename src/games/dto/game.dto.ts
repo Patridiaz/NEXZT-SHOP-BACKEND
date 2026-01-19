@@ -1,4 +1,4 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateGameDto {
   @IsNotEmpty()
@@ -11,6 +11,11 @@ export class CreateGameDto {
   @IsOptional()
   @IsBoolean()
   showInNavbar?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  order?: number;
 }
 
 export class UpdateGameDto {
@@ -24,4 +29,9 @@ export class UpdateGameDto {
   @IsOptional()
   @IsBoolean()
   showInNavbar?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  order?: number;
 }

@@ -109,4 +109,18 @@ export class MailService {
     `;
     await this.sendMail(userEmail, `Actualización de Orden #${orderId}`, this.getBaseTemplate(content));
   }
+
+  async sendResetPasswordEmail(userEmail: string, userName: string, token: string) {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://nextz.cl';
+    const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+
+    const content = `
+      <h2>Recuperación de Contraseña</h2>
+      <p>Hola ${userName}, has solicitado restablecer tu contraseña en Nextz.</p>
+      <p>Haz clic en el siguiente botón para continuar con el proceso. Este enlace expirará en 1 hora.</p>
+      <a href="${resetUrl}" class="button">Restablecer Contraseña</a>
+      <p>Si no solicitaste este cambio, puedes ignorar este correo de forma segura.</p>
+    `;
+    await this.sendMail(userEmail, 'Recuperación de Contraseña - Nextz', this.getBaseTemplate(content));
+  }
 }

@@ -19,4 +19,7 @@ export class Game {
 
   @Column({ default: false })
   showInNavbar: boolean;
+
+  @Column({ default: 0 })
+  order: number;
 }

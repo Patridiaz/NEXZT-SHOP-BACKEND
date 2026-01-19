@@ -44,11 +44,11 @@ export class Product {
   brand: Brand;
 
 
-  @ManyToOne(() => Game, (game) => game.products, { nullable: true })
+  @ManyToOne(() => Game, (game) => game.products, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'game_id' })
   game: Game | null;
 
-  @ManyToOne(() => Edition, (edition) => edition.products, { nullable: true })
+  @ManyToOne(() => Edition, (edition) => edition.products, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'edition_id' })
   edition: Edition | null;
 

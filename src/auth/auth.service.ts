@@ -1,15 +1,16 @@
-/* eslint-disable prettier/prettier */
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { RegisterFromGuestDto } from './dto/register-from-guest.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PaymentService } from 'src/payment/payment.service';
 import { Order } from 'src/orders/order.entity';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Repository, MoreThan } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { CreateUserDto } from 'src/users/dto/create-user.dto';
 import { MailService } from 'src/mail/mail.service';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/recovery.dto';
 
 @Injectable()
 export class AuthService {
@@ -136,5 +137,47 @@ export class AuthService {
     // 4. Devuelve el usuario sin la contraseña
     const { password, ...result } = savedUser;
     return result;
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.userRepo.findOneBy({ email: dto.email });
+
+    // Por seguridad, en sistemas reales podrías no lanzar error si no existe,
+    // pero aquí seremos directos para facilitar la UI.
+    if (!user) {
+      throw new NotFoundException('No existe un usuario con este correo electrónico.');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 1); // 1 hora de validez
+
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = expires;
+    await this.userRepo.save(user);
+
+    await this.mailService.sendResetPasswordEmail(user.email, user.name, token);
+
+    return { message: 'Se ha enviado un correo con instrucciones para restablecer tu contraseña.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.userRepo.findOne({
+      where: {
+        resetPasswordToken: dto.token,
+        resetPasswordExpires: MoreThan(new Date()),
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('El token es inválido o ha expirado.');
+    }
+
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await this.userRepo.save(user);
+
+    return { message: 'Tu contraseña ha sido restablecida exitosamente.' };
   }
 }

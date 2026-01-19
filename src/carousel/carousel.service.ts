@@ -22,6 +22,7 @@ export class CarouselService {
         return this.carouselRepo.find({
             where: { isActive: true },
             order: { order: 'ASC', id: 'DESC' },
+            take: 6, // ✅ Limitar a 6 imágenes para el carrusel del home
         });
     }
 
