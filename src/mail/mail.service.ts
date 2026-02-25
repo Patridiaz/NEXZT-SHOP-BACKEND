@@ -8,24 +8,30 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
 
   constructor(private configService: ConfigService) {
+    const host = this.configService.get<string>('MAIL_HOST');
+    const port = parseInt(this.configService.get<string>('MAIL_PORT') || '465', 10);
     const user = this.configService.get<string>('MAIL_USER');
     const pass = this.configService.get<string>('MAIL_PASS');
 
     this.transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: host,
+      port: port,
+      secure: port === 465, // true para 465 (SSL), false para 587 (TLS/STARTTLS)
       auth: {
         user: user,
         pass: pass,
       },
+      tls: {
+        rejectUnauthorized: false, // Necesario en algunos hostings con cert. autofirmado
+      },
     });
 
     // Verificar conexión al iniciar
-    this.transporter.verify((error, success) => {
+    this.transporter.verify((error) => {
       if (error) {
         this.logger.error(`Error de conexión SMTP: ${error.message}`);
-        this.logger.debug(`Credenciales usadas - User: ${user}, Pass length: ${pass?.length || 0}`);
       } else {
-        this.logger.log('Servidor de correo listo para enviar mensajes');
+        this.logger.log(`Servidor de correo listo → ${host}:${port} (${user})`);
       }
     });
   }
