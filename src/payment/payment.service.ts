@@ -55,13 +55,10 @@ export class PaymentService {
       urlReturn: process.env.FLOW_RETURN_URL!,
     };
 
-    // ✅ OBTENEMOS EL EMAIL REAL (SI EXISTE)
-    const customerEmail = order.user?.email || order.guestEmail;
-
-    // Usamos el email real del cliente para producción
-    if (customerEmail) {
-      params.email = customerEmail;
-    }
+    // Flow requiere el email del pagador — usamos el del cliente o fallback del .env
+    const customerEmail = order.user?.email || order.guestEmail || process.env.MAIL_USER;
+    params.email = customerEmail!;
+    this.logger.log(`Email usado para Flow: ${customerEmail}`);
 
     const signature = this.buildSignature(params);
     const body = new URLSearchParams({ ...params, s: signature }).toString();
