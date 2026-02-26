@@ -63,6 +63,14 @@ export class PaymentService {
     const signature = this.buildSignature(params);
     const body = new URLSearchParams({ ...params, s: signature }).toString();
 
+    // Diagnóstico: loguear todos los params antes de enviar a Flow
+    this.logger.log(`Params enviados a Flow: ${JSON.stringify({
+      ...params,
+      apiKey: params.apiKey ? `${params.apiKey.slice(0, 8)}...` : 'UNDEFINED',
+      baseUrl: this.baseUrl || 'UNDEFINED',
+      secretKey: this.secretKey ? 'OK' : 'UNDEFINED',
+    })}`);
+
     try {
       const { data } = await axios.post(`${this.baseUrl}/payment/create`, body, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
@@ -83,10 +91,14 @@ export class PaymentService {
 
     } catch (err: any) {
       const flowError = err.response?.data;
-      this.logger.error('Error en createPayment:', JSON.stringify(flowError) || err.message);
-      this.logger.error(`FLOW_BASE_URL: ${this.baseUrl} | FLOW_API_KEY present: ${!!this.apiKey} | amount: ${amount}`);
+      this.logger.error('Error en createPayment - respuesta completa de Flow:', JSON.stringify(flowError));
+      this.logger.error(`URL: ${this.baseUrl}/payment/create | apiKey: ${this.apiKey?.slice(0, 8)}... | amount: ${amount} | email: ${params.email}`);
       throw new HttpException(
-        flowError?.message || 'Error al crear el pago en Flow',
+        {
+          message: flowError?.message || err.message || 'Error al crear el pago en Flow',
+          flowCode: flowError?.code,
+          detail: flowError,
+        },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
