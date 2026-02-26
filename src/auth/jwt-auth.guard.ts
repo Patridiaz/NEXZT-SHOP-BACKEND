@@ -1,31 +1,40 @@
 // En src/auth/jwt-auth.guard.ts
 
 import { Injectable, ExecutionContext } from '@nestjs/common';
-import { Reflector } from '@nestjs/core'; // ✅ 1. Importa Reflector
+import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import { IS_PUBLIC_KEY } from './public.decorator'; // ✅ 2. Importa la clave
+import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  
-  // ✅ 3. Inyecta Reflector en el constructor
+
   constructor(private reflector: Reflector) {
     super();
   }
 
   canActivate(context: ExecutionContext) {
-    // ✅ 4. Revisa si la ruta tiene la metadata 'isPublic'
+    // Siempre intentamos parsear el JWT para poblar request.user
+    // (necesario para que MaintenanceGuard identifique al admin en rutas públicas)
+    return super.canActivate(context);
+  }
+
+  // Si la ruta es pública y el token falla/no existe, NO rechazamos — request.user queda null
+  handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    // Si es pública, permite el acceso sin verificar el token
     if (isPublic) {
-      return true;
+      // En rutas públicas: si hay error de auth, lo ignoramos (usuario anónimo)
+      return user || null;
     }
 
-    // Si no es pública, procede con la validación normal del token JWT
-    return super.canActivate(context);
+    // En rutas protegidas: comportamiento normal (lanza excepción si no hay token)
+    if (err || !user) {
+      throw err || new Error('Unauthorized');
+    }
+
+    return user;
   }
 }

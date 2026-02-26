@@ -1,6 +1,5 @@
 import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
 export class MaintenanceGuard implements CanActivate {
@@ -15,18 +14,11 @@ export class MaintenanceGuard implements CanActivate {
         }
 
         const request = context.switchToHttp().getRequest();
+        const url: string = request.url || '';
 
-        // Siempre permitir el login para que los admins puedan entrar
-        if (request.url?.startsWith('/auth/login')) {
-            return true;
-        }
-
-        // Permitir rutas marcadas como @Public() (ej: webhooks de Flow)
-        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-            context.getHandler(),
-            context.getClass(),
-        ]);
-        if (isPublic) {
+        // Siempre permitir el login y los webhooks de pago (son críticos)
+        const allowedPaths = ['/auth/login', '/payments/confirm', '/payments/return'];
+        if (allowedPaths.some(path => url.startsWith(path))) {
             return true;
         }
 
@@ -36,7 +28,7 @@ export class MaintenanceGuard implements CanActivate {
             return true;
         }
 
-        // Bloquear a todos los demás
+        // Bloquear a todos los demás (incluidas rutas @Public)
         throw new HttpException(
             {
                 statusCode: 503,
