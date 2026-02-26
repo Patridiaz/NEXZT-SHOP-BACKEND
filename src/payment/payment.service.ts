@@ -58,18 +58,10 @@ export class PaymentService {
     // ✅ OBTENEMOS EL EMAIL REAL (SI EXISTE)
     const customerEmail = order.user?.email || order.guestEmail;
 
-    // ✅ AÑADIMOS EL EMAIL A LOS PARÁMETROS SOLO SI ES VÁLIDO
-    // Para el sandbox de Flow, es más seguro seguir usando 'cliente@flow.cl'
-    // para evitar cualquier error de validación por su parte.
-    params.email = 'pdiaz290@gmail.com';
-
-    /*
-    // LÓGICA PARA CUANDO PASES A PRODUCCIÓN:
-    // Comenta la línea de arriba y descomenta esta.
+    // Usamos el email real del cliente para producción
     if (customerEmail) {
       params.email = customerEmail;
     }
-    */
 
     const signature = this.buildSignature(params);
     const body = new URLSearchParams({ ...params, s: signature }).toString();
@@ -93,8 +85,13 @@ export class PaymentService {
       return { paymentUrl: `${data.url}?token=${data.token}`, token: data.token };
 
     } catch (err: any) {
-      this.logger.error('Error en createPayment:', err.response?.data || err.message);
-      throw new HttpException('Error al crear el pago en Flow', HttpStatus.INTERNAL_SERVER_ERROR);
+      const flowError = err.response?.data;
+      this.logger.error('Error en createPayment:', JSON.stringify(flowError) || err.message);
+      this.logger.error(`FLOW_BASE_URL: ${this.baseUrl} | FLOW_API_KEY present: ${!!this.apiKey} | amount: ${amount}`);
+      throw new HttpException(
+        flowError?.message || 'Error al crear el pago en Flow',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
