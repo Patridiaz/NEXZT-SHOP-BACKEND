@@ -72,6 +72,7 @@ export class ProductService {
     search?: string;
     sort?: string;
     order?: 'ASC' | 'DESC';
+    showHidden?: boolean; // Solo admin: si es true, muestra todos los productos
   }) {
     const {
       page = 1,
@@ -86,7 +87,8 @@ export class ProductService {
       code,
       name,
       sort = 'name',
-      order = 'ASC'
+      order = 'ASC',
+      showHidden = false,
     } = filters;
 
     // LOG PARA DEBUG EN LA TERMINAL (Ayuda al usuario a ver qué llega del frontend)
@@ -98,6 +100,11 @@ export class ProductService {
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.game', 'game')
       .leftJoinAndSelect('product.edition', 'edition');
+
+    // Solo mostrar productos visibles en la tienda pública
+    if (!showHidden) {
+      query.andWhere('product.isVisible = true');
+    }
 
     // La búsqueda por texto general
     if (search && search.trim() !== '') {
@@ -245,12 +252,13 @@ export class ProductService {
   }
 
   async findRandom(limit: number): Promise<Product[]> {
-    // 1. Obtenemos solo los IDs de productos aleatorios.
+    // Solo productos visibles en el carrusel/random
     const randomIdsResult = await this.productRepo.createQueryBuilder('product')
-      .select('product.id', 'id') // Seleccionamos solo el ID
+      .select('product.id', 'id')
+      .where('product.isVisible = true')
       .orderBy('RANDOM()')
       .take(limit)
-      .getRawMany(); // Usamos getRawMany para una consulta simple
+      .getRawMany();
 
     if (randomIdsResult.length === 0) {
       return []; // Si no hay productos, devuelve un array vacío

@@ -61,4 +61,7 @@ export class Product {
 
   @Column({ type: 'int', nullable: true })
   purchaseLimit: number | null;
+
+  @Column({ type: 'boolean', default: true })
+  isVisible: boolean;
 }

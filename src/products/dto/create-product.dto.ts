@@ -1,13 +1,14 @@
 import { Transform } from 'class-transformer'; // 👈 Import Transform
 import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
-  IsInt,       // 👈 Import IsInt for IDs and stock
-  Min          // 👈 Import Min for stock and offerPrice
+  IsInt,
+  Min
 } from 'class-validator';
 import { ProductCategory } from '../enums/product-category.enum';
 import { ProductRarity } from '../enums/product-rarity.enum';
@@ -71,4 +72,13 @@ export class CreateProductDto {
   @IsInt()
   @Min(1)
   purchaseLimit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  isVisible?: boolean;
 }

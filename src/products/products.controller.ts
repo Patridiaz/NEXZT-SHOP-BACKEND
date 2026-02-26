@@ -48,6 +48,7 @@ export class ProductController {
     @Query('rarity') rarity?: ProductRarity,
     @Query('code') code?: string,
     @Query('name') name?: string,
+    @Query('showHidden') showHidden?: string,
   ) {
     return this.productService.findAll({
       page,
@@ -63,6 +64,7 @@ export class ProductController {
       order,
       code,
       name,
+      showHidden: showHidden === 'true',
     });
   }
   @Public()
