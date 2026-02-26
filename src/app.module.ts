@@ -15,6 +15,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventsModule } from './events/events.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { MaintenanceGuard } from './auth/maintenance.guard';
 import { DashboardModule } from './admin/dashboard/dashboard.module';
 import { LocationsModule } from './locations/locations.module';
 import { CarouselModule } from './carousel/carousel.module';
@@ -62,6 +63,10 @@ import { MailModule } from './mail/mail.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: MaintenanceGuard,
     },
   ],
 })
