@@ -63,13 +63,20 @@ export class PaymentService {
     const signature = this.buildSignature(params);
     const body = new URLSearchParams({ ...params, s: signature }).toString();
 
-    // Diagnóstico: loguear todos los params antes de enviar a Flow
-    this.logger.log(`Params enviados a Flow: ${JSON.stringify({
-      ...params,
-      apiKey: params.apiKey ? `${params.apiKey.slice(0, 8)}...` : 'UNDEFINED',
-      baseUrl: this.baseUrl || 'UNDEFINED',
-      secretKey: this.secretKey ? 'OK' : 'UNDEFINED',
-    })}`);
+    // Validación previa: detectar exactamente qué param falta o es undefined
+    const missingParams = Object.entries(params)
+      .filter(([, v]) => !v || v === 'undefined')
+      .map(([k]) => k);
+
+    if (missingParams.length > 0) {
+      this.logger.error(`Params faltantes o undefined antes de enviar a Flow: ${missingParams.join(', ')}`);
+      throw new HttpException(
+        { message: `Parámetros de pago faltantes: ${missingParams.join(', ')}`, missingParams },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    this.logger.log(`Todos los params OK. Enviando a Flow (${this.baseUrl})`);
 
     try {
       const { data } = await axios.post(`${this.baseUrl}/payment/create`, body, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
