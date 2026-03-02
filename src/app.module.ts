@@ -20,6 +20,7 @@ import { DashboardModule } from './admin/dashboard/dashboard.module';
 import { LocationsModule } from './locations/locations.module';
 import { CarouselModule } from './carousel/carousel.module';
 import { MailModule } from './mail/mail.module';
+import { RaritiesModule } from './rarities/rarities.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { MailModule } from './mail/mail.module';
     LocationsModule,
     CarouselModule,
     MailModule,
+    RaritiesModule,
   ],
   providers: [
     {

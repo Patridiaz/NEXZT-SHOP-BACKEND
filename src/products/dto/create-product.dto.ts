@@ -11,7 +11,6 @@ import {
   Min
 } from 'class-validator';
 import { ProductCategory } from '../enums/product-category.enum';
-import { ProductRarity } from '../enums/product-rarity.enum';
 
 export class CreateProductDto {
   @IsString() // TypeORM/PostgreSQL handle varchar length, focus on validation
@@ -64,8 +63,10 @@ export class CreateProductDto {
   gameId?: number;
 
   @IsOptional()
-  @IsEnum(ProductRarity)
-  rarity?: ProductRarity;
+  @Transform(({ value }) => value ? parseInt(value, 10) : undefined)
+  @IsInt()
+  @IsPositive()
+  rarityId?: number;
 
   @IsOptional()
   @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))

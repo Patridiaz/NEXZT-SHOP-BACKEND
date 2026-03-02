@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Query, ParseEnumPipe, DefaultValuePipe, ParseIntPipe, NotFoundException, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, Res, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Query, ParseEnumPipe, DefaultValuePipe, ParseIntPipe, NotFoundException, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, Res, BadRequestException, UseGuards, ForbiddenException } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductService } from './products.service';
@@ -7,12 +7,14 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { ProductCategory } from './enums/product-category.enum';
 import { Product } from './product.entity';
-import { ProductRarity } from './enums/product-rarity.enum';
 import { ExcelService } from 'src/excel/excel.service';
 import type { Response } from 'express';
 import { GetProductsByIdsDto } from './dto/get-products-by-ids.dto';
 import { Public } from 'src/auth/public.decorator';
 import { multerOptions } from './multer.config';
+import { Roles } from 'src/auth/roles.decorator';
+import { RolesGuard } from 'src/auth/roles.guard';
+import { UserRole } from 'src/users/user.entity';
 
 @Controller('products')
 export class ProductController {
@@ -22,12 +24,13 @@ export class ProductController {
   ) { }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @UseInterceptors(FileInterceptor('file', multerOptions))
   create(
-    @UploadedFile() file: Express.Multer.File, // 👈 Inyectar el archivo
-    @Body() createProductDto: CreateProductDto // 👈 Inyectar el DTO
+    @UploadedFile() file: Express.Multer.File,
+    @Body() createProductDto: CreateProductDto
   ) {
-    // Pasar el archivo al servicio para que guarde la ruta
     return this.productService.create(createProductDto, file);
   }
 
@@ -45,7 +48,7 @@ export class ProductController {
     @Query('brandId', new ParseIntPipe({ optional: true })) brandId?: number,
     @Query('gameId', new ParseIntPipe({ optional: true })) gameId?: number,
     @Query('editionId', new ParseIntPipe({ optional: true })) editionId?: number,
-    @Query('rarity') rarity?: ProductRarity,
+    @Query('rarityId', new ParseIntPipe({ optional: true })) rarityId?: number,
     @Query('code') code?: string,
     @Query('name') name?: string,
     @Query('showHidden') showHidden?: string,
@@ -59,7 +62,7 @@ export class ProductController {
       brandId,
       gameId,
       editionId,
-      rarity,
+      rarityId,
       sort,
       order,
       code,
@@ -93,9 +96,10 @@ export class ProductController {
     return product;
   }
 
-  // ✅ MÉTODO DE ACTUALIZACIÓN CORREGIDO
   @Patch(':id')
-  @UseInterceptors(FileInterceptor('file', multerOptions)) // <-- Usa la misma variable
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('file', multerOptions))
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateProductDto: UpdateProductDto,
@@ -105,6 +109,8 @@ export class ProductController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   remove(@Param('id') id: string) {
     return this.productService.remove(+id);
   }

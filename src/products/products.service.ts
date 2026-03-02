@@ -9,8 +9,8 @@ import { Edition } from 'src/editions/edition.entity';
 import { Game } from 'src/games/game.entity';
 import { ProductCategory } from './enums/product-category.enum';
 import { OrderItem } from 'src/orders/order-item.entity';
-import { ProductRarity } from './enums/product-rarity.enum';
 import { Workbook } from 'exceljs';
+import { Rarity } from 'src/rarities/rarity.entity';
 
 @Injectable()
 export class ProductService {
@@ -20,6 +20,7 @@ export class ProductService {
     @InjectRepository(Brand) private readonly brandRepo: Repository<Brand>,
     @InjectRepository(Edition) private readonly editionRepo: Repository<Edition>,
     @InjectRepository(Game) private readonly gameRepo: Repository<Game>,
+    @InjectRepository(Rarity) private readonly rarityRepo: Repository<Rarity>,
     private entityManager: EntityManager,
   ) { }
 
@@ -54,6 +55,12 @@ export class ProductService {
       product.edition = edition;
     }
 
+    if (dto.rarityId) {
+      const rarity = await this.rarityRepo.findOneBy({ id: dto.rarityId });
+      if (!rarity) throw new NotFoundException(`Rareza con ID ${dto.rarityId} no encontrada`);
+      product.rarity = rarity;
+    }
+
     // 4. Guarda el nuevo producto
     return this.productRepo.save(product);
   }
@@ -64,7 +71,7 @@ export class ProductService {
     game?: string;
     gameId?: number;
     editionId?: number;
-    rarity?: ProductRarity;
+    rarityId?: number;
     code?: string;
     name?: string;
     page?: number;
@@ -83,7 +90,7 @@ export class ProductService {
       gameId,
       editionId,
       category,
-      rarity,
+      rarityId,
       code,
       name,
       sort = 'name',
@@ -93,13 +100,14 @@ export class ProductService {
 
     // LOG PARA DEBUG EN LA TERMINAL (Ayuda al usuario a ver qué llega del frontend)
     console.log('[DEBUG] Products Search Params:', {
-      search, category, game, gameId, brandId, editionId, rarity
+      search, category, game, gameId, brandId, editionId, rarityId
     });
 
     const query = this.productRepo.createQueryBuilder('product')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.game', 'game')
-      .leftJoinAndSelect('product.edition', 'edition');
+      .leftJoinAndSelect('product.edition', 'edition')
+      .leftJoinAndSelect('product.rarity', 'rarity');
 
     // Solo mostrar productos visibles en la tienda pública
     if (!showHidden) {
@@ -141,7 +149,7 @@ export class ProductService {
     if (brandId) query.andWhere('brand.id = :brandId', { brandId });
     if (gameId) query.andWhere('game.id = :gameId', { gameId });
     if (editionId) query.andWhere('edition.id = :editionId', { editionId });
-    if (rarity) query.andWhere('product.rarity = :rarity', { rarity });
+    if (rarityId) query.andWhere('rarity.id = :rarityId', { rarityId });
     if (category && category !== 'undefined' && category !== 'null' && category !== 'all') {
       query.andWhere('product.category = :category', { category });
     }
@@ -149,7 +157,7 @@ export class ProductService {
     const sortMap = {
       'code': 'product.code',
       'name': 'product.name',
-      'rarity': 'product.rarity',
+      'rarity': 'rarity.name',
       'edition': 'edition.name',
       'stock': 'product.stock',
       'price': 'product.price'
@@ -168,7 +176,8 @@ export class ProductService {
     const query = this.productRepo.createQueryBuilder('product')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.game', 'game')
-      .leftJoinAndSelect('product.edition', 'edition');
+      .leftJoinAndSelect('product.edition', 'edition')
+      .leftJoinAndSelect('product.rarity', 'rarity');
 
     if (filters.game) {
       query.andWhere('game.name = :gameName', { gameName: filters.game });
@@ -188,7 +197,7 @@ export class ProductService {
   async findOne(id: number): Promise<Product> {
     const product = await this.productRepo.findOne({
       where: { id },
-      relations: ['brand', 'edition', 'game'],
+      relations: ['brand', 'edition', 'game', 'rarity'],
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
@@ -232,6 +241,16 @@ export class ProductService {
       product.edition = null;
     }
 
+    if (dto.rarityId !== undefined) {
+      if (dto.rarityId === null) {
+        product.rarity = null;
+      } else {
+        const rarity = await this.rarityRepo.findOneBy({ id: dto.rarityId });
+        if (!rarity) throw new NotFoundException(`Rareza con ID ${dto.rarityId} no encontrada`);
+        product.rarity = rarity;
+      }
+    }
+
     // 4. Guardamos el producto con todas sus relaciones actualizadas
     return this.productRepo.save(product);
   }
@@ -272,7 +291,7 @@ export class ProductService {
       where: {
         id: In(randomIds), // Usa el operador "In" para buscar por una lista de IDs
       },
-      relations: ['brand', 'edition', 'game'], // Carga las relaciones que necesites
+      relations: ['brand', 'edition', 'game', 'rarity'], // Carga las relaciones que necesites
     });
   }
 
@@ -331,17 +350,20 @@ export class ProductService {
     const brandNames = new Set(rowsData.map(r => r.values[6]?.toString().trim()).filter(Boolean));
     const gameNames = new Set(rowsData.map(r => r.values[7]?.toString().trim()).filter(Boolean));
     const editionNames = new Set(rowsData.map(r => r.values[8]?.toString().trim()).filter(Boolean));
+    const rarityNames = new Set(rowsData.map(r => r.values[10]?.toString().trim()).filter(Boolean));
 
-    const [brands, games, editions, existingProducts] = await Promise.all([
+    const [brands, games, editions, rarities, existingProducts] = await Promise.all([
       this.brandRepo.findBy({ name: In([...brandNames]) }),
       this.gameRepo.findBy({ name: In([...gameNames]) }),
       this.editionRepo.findBy({ name: In([...editionNames]) }),
+      this.rarityRepo.findBy({ name: In([...rarityNames]) }),
       this.productRepo.find({ select: ['code'] }),
     ]);
 
     const brandMap = new Map(brands.map(b => [b.name, b]));
     const gameMap = new Map(games.map(g => [g.name, g]));
     const editionMap = new Map(editions.map(e => [e.name, e]));
+    const rarityMap = new Map(rarities.map(r => [r.name, r]));
     const existingCodes = new Set(existingProducts.map(p => p.code));
 
     // Ahora procesamos los datos con las entidades ya cargadas
@@ -356,7 +378,7 @@ export class ProductService {
         gameName: values[7]?.toString().trim(),
         editionName: values[8]?.toString().trim(),
         categoryName: values[9]?.toString().trim() as ProductCategory | undefined,
-        rarityName: values[10]?.toString().trim() as ProductRarity | undefined,
+        rarityName: values[10]?.toString().trim(),
       };
 
       // --- Validar Fila ---
@@ -395,14 +417,12 @@ export class ProductService {
         errors.push({ row: rowNumber, message: `Categoría inválida: '${rowData.categoryName}'.` });
         continue;
       }
-      let rarity: ProductRarity | undefined;
+
+      let rarity: Rarity | undefined;
       if (rowData.rarityName) {
-        // ✅ Comprueba si el texto del Excel es uno de los valores válidos del Enum
-        if (Object.values(ProductRarity).includes(rowData.rarityName)) {
-          rarity = rowData.rarityName; // Si es válido, lo asignamos
-        } else {
-          // Si no es válido, lanzamos un error detallado
-          errors.push({ row: rowNumber, message: `Rareza inválida: '${rowData.rarityName}'. Los valores válidos son: ${Object.values(ProductRarity).join(', ')}.` });
+        rarity = rarityMap.get(rowData.rarityName);
+        if (!rarity) {
+          errors.push({ row: rowNumber, message: `La rareza '${rowData.rarityName}' no fue encontrada.` });
           continue;
         }
       }

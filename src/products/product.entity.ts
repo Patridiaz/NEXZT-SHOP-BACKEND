@@ -3,7 +3,8 @@ import { Edition } from 'src/editions/edition.entity';
 import { Game } from 'src/games/game.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ProductCategory } from './enums/product-category.enum';
-import { ProductRarity } from './enums/product-rarity.enum';
+import { Rarity } from 'src/rarities/rarity.entity';
+
 @Entity('products')
 export class Product {
   @PrimaryGeneratedColumn()
@@ -52,12 +53,9 @@ export class Product {
   @JoinColumn({ name: 'edition_id' })
   edition: Edition | null;
 
-  @Column({
-    type: 'enum',
-    enum: ProductRarity,
-    nullable: true, // ✅ Permite que productos antiguos no tengan rareza
-  })
-  rarity: ProductRarity;
+  @ManyToOne(() => Rarity, (rarity) => rarity.products, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'rarity_id' })
+  rarity: Rarity | null;
 
   @Column({ type: 'int', nullable: true })
   purchaseLimit: number | null;
