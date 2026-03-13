@@ -337,34 +337,35 @@ export class ProductService {
     }
 
     const errors: { row: number; message: string }[] = [];
-    const productsToCreate: Partial<Product>[] = [];
+    const productsToUpsert: any[] = [];
     const rowsData: any[] = [];
 
     // Primero, leemos todas las filas para poder hacer consultas optimizadas
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (rowNumber === 1 || row.values.length === 0) return; // Ignora header y filas vacías
-      rowsData.push({ rowNumber, values: row.values });
+      rowsData.push({ rowNumber, values: row.values as any });
     });
 
-    // ✅ 1. Optimización: Cargar solo las entidades necesarias que se mencionan en el archivo
+    // ✅ Cargamos solo las entidades necesarias que se mencionan en el archivo
     const brandNames = new Set(rowsData.map(r => r.values[6]?.toString().trim()).filter(Boolean));
     const gameNames = new Set(rowsData.map(r => r.values[7]?.toString().trim()).filter(Boolean));
     const editionNames = new Set(rowsData.map(r => r.values[8]?.toString().trim()).filter(Boolean));
     const rarityNames = new Set(rowsData.map(r => r.values[10]?.toString().trim()).filter(Boolean));
+    const codesInExcel = new Set(rowsData.map(r => r.values[1]?.toString().trim()).filter(Boolean));
 
     const [brands, games, editions, rarities, existingProducts] = await Promise.all([
       this.brandRepo.findBy({ name: In([...brandNames]) }),
       this.gameRepo.findBy({ name: In([...gameNames]) }),
       this.editionRepo.findBy({ name: In([...editionNames]) }),
       this.rarityRepo.findBy({ name: In([...rarityNames]) }),
-      this.productRepo.find({ select: ['code'] }),
+      this.productRepo.findBy({ code: In([...codesInExcel]) }),
     ]);
 
     const brandMap = new Map(brands.map(b => [b.name, b]));
     const gameMap = new Map(games.map(g => [g.name, g]));
     const editionMap = new Map(editions.map(e => [e.name, e]));
     const rarityMap = new Map(rarities.map(r => [r.name, r]));
-    const existingCodes = new Set(existingProducts.map(p => p.code));
+    const existingProductsMap = new Map(existingProducts.map(p => [p.code, p]));
 
     // Ahora procesamos los datos con las entidades ya cargadas
     for (const { rowNumber, values } of rowsData) {
@@ -379,6 +380,10 @@ export class ProductService {
         editionName: values[8]?.toString().trim(),
         categoryName: values[9]?.toString().trim() as ProductCategory | undefined,
         rarityName: values[10]?.toString().trim(),
+        offerPrice: values[11] ? parseFloat(values[11]) : undefined,
+        purchaseLimit: values[12] ? parseInt(values[12], 10) : undefined,
+        isVisibleStr: values[13]?.toString().trim().toUpperCase(),
+        imageUrl: values[14]?.toString().trim(),
       };
 
       // --- Validar Fila ---
@@ -386,60 +391,73 @@ export class ProductService {
         errors.push({ row: rowNumber, message: 'Las columnas code, name, price, stock y brandName son obligatorias.' });
         continue;
       }
-      if (existingCodes.has(rowData.code)) {
-        errors.push({ row: rowNumber, message: `El código de producto '${rowData.code}' ya existe.` });
-        continue;
-      }
+
       const brand = brandMap.get(rowData.brandName);
       if (!brand) {
-        errors.push({ row: rowNumber, message: `La marca '${rowData.brandName}' no fue encontrada.` });
+        errors.push({ row: rowNumber, message: `La marca '${rowData.brandName}' no fue encontrada. Regístrala primero.` });
         continue;
       }
 
-      let game: Game | undefined;
+      let game: Game | null = null;
       if (rowData.gameName) {
-        game = gameMap.get(rowData.gameName);
+        game = gameMap.get(rowData.gameName) || null;
         if (!game) {
           errors.push({ row: rowNumber, message: `El juego '${rowData.gameName}' no fue encontrado.` });
           continue;
         }
       }
 
-      let edition: Edition | undefined;
+      let edition: Edition | null = null;
       if (rowData.editionName) {
-        edition = editionMap.get(rowData.editionName);
+        edition = editionMap.get(rowData.editionName) || null;
         if (!edition) {
           errors.push({ row: rowNumber, message: `La edición '${rowData.editionName}' no fue encontrada.` });
           continue;
         }
       }
-      if (rowData.categoryName && !Object.values(ProductCategory).includes(rowData.categoryName)) {
-        errors.push({ row: rowNumber, message: `Categoría inválida: '${rowData.categoryName}'.` });
-        continue;
-      }
 
-      let rarity: Rarity | undefined;
+      let rarity: Rarity | null = null;
       if (rowData.rarityName) {
-        rarity = rarityMap.get(rowData.rarityName);
+        rarity = rarityMap.get(rowData.rarityName) || null;
         if (!rarity) {
           errors.push({ row: rowNumber, message: `La rareza '${rowData.rarityName}' no fue encontrada.` });
           continue;
         }
       }
 
-      // ✅ 3. Claridad: Mapeo explícito de propiedades
-      productsToCreate.push({
+      if (rowData.categoryName && !Object.values(ProductCategory).includes(rowData.categoryName)) {
+        errors.push({ row: rowNumber, message: `Categoría inválida: '${rowData.categoryName}'.` });
+        continue;
+      }
+
+      // Procesar visibilidad (SI, YES, 1, TRUE -> true)
+      let isVisible = true;
+      if (rowData.isVisibleStr) {
+        isVisible = ['SI', 'S', 'YES', 'Y', 'TRUE', '1'].includes(rowData.isVisibleStr);
+      }
+
+      // Lógica de Upsert: buscar si ya existe para actualizar
+      const existingProduct = existingProductsMap.get(rowData.code);
+
+      const productData = {
+        ...(existingProduct || {}),
         code: rowData.code,
         name: rowData.name,
-        description: rowData.description,
+        description: rowData.description || (existingProduct?.description),
         price: rowData.price,
         stock: rowData.stock,
         brand,
         game,
         edition,
-        category: rowData.categoryName,
+        category: rowData.categoryName || (existingProduct?.category || ProductCategory.CARTA),
         rarity,
-      });
+        offerPrice: (rowData.offerPrice !== undefined && !isNaN(rowData.offerPrice)) ? rowData.offerPrice : (existingProduct?.offerPrice),
+        purchaseLimit: (rowData.purchaseLimit !== undefined && !isNaN(rowData.purchaseLimit)) ? rowData.purchaseLimit : (existingProduct?.purchaseLimit),
+        isVisible,
+        imageUrl: rowData.imageUrl || (existingProduct?.imageUrl),
+      };
+
+      productsToUpsert.push(productData);
     }
 
     if (errors.length > 0) {
@@ -449,11 +467,11 @@ export class ProductService {
     // --- Guardar en una transacción ---
     try {
       await this.entityManager.transaction(async transactionalEntityManager => {
-        await transactionalEntityManager.save(Product, productsToCreate);
+        await transactionalEntityManager.save(Product, productsToUpsert);
       });
-      return { message: `Se han creado ${productsToCreate.length} productos con éxito.` };
+      return { message: `Carga exitosa: ${productsToUpsert.length} productos procesados (creados o actualizados).` };
     } catch (error) {
-      throw new BadRequestException(`Ocurrió un error al guardar los productos: ${error.message}`);
+      throw new BadRequestException(`Ocurrió un error al procesar el archivo: ${error.message}`);
     }
   }
 

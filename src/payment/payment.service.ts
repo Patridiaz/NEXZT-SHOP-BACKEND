@@ -161,7 +161,7 @@ export class PaymentService {
         const userEmail = order.user?.email || order.guestEmail;
         const userName = order.user?.name || 'Cliente';
         if (userEmail) {
-          this.mailService.sendOrderPaidEmail(userEmail, userName, order.id, order.total).catch(() => { });
+          this.mailService.sendOrderPaidEmail(userEmail, userName, order.orderCode, order.total).catch(() => { });
         }
       }
 

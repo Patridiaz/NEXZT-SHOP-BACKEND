@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class MailService {
@@ -38,11 +40,23 @@ export class MailService {
 
   private async sendMail(to: string, subject: string, html: string) {
     try {
+      const logoPath = path.join(process.cwd(), 'uploads', 'logo Next Z.png');
+      const attachments: any[] = [];
+
+      if (fs.existsSync(logoPath)) {
+        attachments.push({
+          filename: 'logo.png',
+          path: logoPath,
+          cid: 'logo' // Referenciado en el HTML como <img src="cid:logo">
+        });
+      }
+
       await this.transporter.sendMail({
         from: `"Nextz" <${this.configService.get<string>('MAIL_USER')}>`,
         to,
         subject,
         html,
+        attachments
       });
       this.logger.log(`Email enviado a ${to}: ${subject}`);
     } catch (error) {
@@ -70,7 +84,7 @@ export class MailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Nextz</h1>
+            <img src="cid:logo" alt="Nextz Logo" style="height: 50px;">
           </div>
           <div class="content">
             ${content}
@@ -94,26 +108,26 @@ export class MailService {
     await this.sendMail(userEmail, '¡Bienvenido a Nextz!', this.getBaseTemplate(content));
   }
 
-  async sendOrderPaidEmail(userEmail: string, userName: string, orderId: number, total: number) {
+  async sendOrderPaidEmail(userEmail: string, userName: string, orderCode: string, total: number) {
     const localeTotal = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(total);
     const content = `
       <h2>¡Pago Confirmado!</h2>
-      <p>Hola ${userName}, hemos recibido correctamente el pago de tu orden <span class="highlight">#${orderId}</span>.</p>
+      <p>Hola ${userName}, hemos recibido correctamente el pago de tu orden <span class="highlight">#${orderCode}</span>.</p>
       <p>Total pagado: <span class="highlight">${localeTotal}</span></p>
       <p>Estamos preparando tu pedido. Te avisaremos cuando haya novedades en el despacho.</p>
-      <a href="https://nextz.cl/orders/${orderId}" class="button">Ver mi pedido</a>
+      <a href="https://nextz.cl/orders/${orderCode}" class="button">Ver mi pedido</a>
     `;
-    await this.sendMail(userEmail, `Pago Recibido - Orden #${orderId}`, this.getBaseTemplate(content));
+    await this.sendMail(userEmail, `Pago Recibido - Orden #${orderCode}`, this.getBaseTemplate(content));
   }
 
-  async sendOrderStatusUpdateEmail(userEmail: string, userName: string, orderId: number, status: string) {
+  async sendOrderStatusUpdateEmail(userEmail: string, userName: string, orderCode: string, status: string) {
     const content = `
       <h2>Actualización de tu pedido</h2>
-      <p>Hola ${userName}, el estado de tu pedido <span class="highlight">#${orderId}</span> ha cambiado a: <span class="highlight">${status}</span>.</p>
+      <p>Hola ${userName}, el estado de tu pedido <span class="highlight">#${orderCode}</span> ha cambiado a: <span class="highlight">${status}</span>.</p>
       <p>Puedes seguir el detalle en tiempo real desde tu perfil.</p>
-      <a href="https://nextz.cl/orders/${orderId}" class="button">Ver seguimiento</a>
+      <a href="https://nextz.cl/orders/${orderCode}" class="button">Ver seguimiento</a>
     `;
-    await this.sendMail(userEmail, `Actualización de Orden #${orderId}`, this.getBaseTemplate(content));
+    await this.sendMail(userEmail, `Actualización de Orden #${orderCode}`, this.getBaseTemplate(content));
   }
 
   async sendResetPasswordEmail(userEmail: string, userName: string, token: string) {
@@ -128,5 +142,36 @@ export class MailService {
       <p>Si no solicitaste este cambio, puedes ignorar este correo de forma segura.</p>
     `;
     await this.sendMail(userEmail, 'Recuperación de Contraseña - Nextz', this.getBaseTemplate(content));
+  }
+
+  async sendOrderCancelledEmail(
+    userEmail: string,
+    userName: string,
+    orderCode: string,
+    amount: number,
+    reason: string,
+  ) {
+    const localeAmount = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
+    const content = `
+      <h2>Pedido Cancelado</h2>
+      <p>Hola ${userName}, te informamos que tu pedido <span class="highlight">#${orderCode}</span> ha sido cancelado por el administrador.</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: 600;">N° Pedido:</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">#${orderCode}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: 600;">Monto:</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">${localeAmount}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: 600;">Motivo:</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">${reason}</td>
+        </tr>
+      </table>
+      <p>Nextz se pondrá en contacto contigo vía telefónica o al correo electrónico ingresado al momento de tu compra para coordinar la devolución de tu dinero.</p>
+      <p>Si tienes alguna consulta, no dudes en contactarnos.</p>
+    `;
+    await this.sendMail(userEmail, `Pedido #${orderCode} Cancelado - Nextz`, this.getBaseTemplate(content));
   }
 }

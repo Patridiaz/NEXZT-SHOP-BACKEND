@@ -164,7 +164,7 @@ export class CheckoutController {
                     <div class="order-info">
                         <div>
                             <span style="color: #aaa;">ORDEN</span><br/>
-                            <strong style="font-size: 16px;">#${order?.id || '---'}</strong>
+                            <strong style="font-size: 16px;">${order?.orderCode || '---'}</strong>
                         </div>
                         <div style="text-align: right;">
                             <span style="color: #aaa;">FECHA</span><br/>

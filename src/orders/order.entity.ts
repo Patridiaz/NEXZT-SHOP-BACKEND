@@ -23,13 +23,16 @@ export class Order {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  orderCode: string;
+
   // ... (Relaciones de User, GuestEmail, etc. siguen igual)
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   user: User | null;
 
   @Column({ type: 'int', nullable: true })
   userId: number | null;
-  
+
   @Column({ type: 'varchar', nullable: true })
   guestEmail: string | null;
 
@@ -63,10 +66,10 @@ export class Order {
   @Column({ nullable: true })
   expiresAt: Date;
 
-  @Column({ 
-    type: 'enum', 
-    enum: DeliveryStatus, 
-    default: DeliveryStatus.PREPARING 
+  @Column({
+    type: 'enum',
+    enum: DeliveryStatus,
+    default: DeliveryStatus.PREPARING
   })
   deliveryStatus: DeliveryStatus;
 }
