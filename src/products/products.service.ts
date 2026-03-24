@@ -160,7 +160,9 @@ export class ProductService {
       'rarity': 'rarity.name',
       'edition': 'edition.name',
       'stock': 'product.stock',
-      'price': 'product.price'
+      'price': 'product.price',
+      'createdAt': 'product.createdAt',
+      'updatedAt': 'product.updatedAt',
     };
 
     const sortKey = sortMap[sort] || 'product.name';

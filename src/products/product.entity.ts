@@ -1,7 +1,7 @@
 import { Brand } from 'src/brands/brand.entity';
 import { Edition } from 'src/editions/edition.entity';
 import { Game } from 'src/games/game.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { ProductCategory } from './enums/product-category.enum';
 import { Rarity } from 'src/rarities/rarity.entity';
 
@@ -62,4 +62,10 @@ export class Product {
 
   @Column({ type: 'boolean', default: true })
   isVisible: boolean;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
