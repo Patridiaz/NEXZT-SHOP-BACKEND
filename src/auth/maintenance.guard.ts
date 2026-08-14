@@ -1,12 +1,16 @@
 import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class MaintenanceGuard implements CanActivate {
-    constructor(private reflector: Reflector) { }
+    constructor(
+        private reflector: Reflector,
+        private settingsService: SettingsService,
+    ) { }
 
-    canActivate(context: ExecutionContext): boolean {
-        const isMaintenanceMode = process.env.MAINTENANCE_MODE === 'true';
+    async canActivate(context: ExecutionContext): Promise<boolean> {
+        const isMaintenanceMode = await this.settingsService.getMaintenanceMode();
 
         // Si no hay modo mantenimiento, todo pasa normal
         if (!isMaintenanceMode) {
@@ -15,10 +19,18 @@ export class MaintenanceGuard implements CanActivate {
 
         const request = context.switchToHttp().getRequest();
         const url: string = request.url || '';
+        const method: string = request.method || '';
 
-        // Siempre permitir el login y los webhooks de pago (son críticos)
-        const allowedPaths = ['/auth/login', '/payments/confirm', '/payments/return'];
-        if (allowedPaths.some(path => url.startsWith(path))) {
+        // Rutas que siempre se permiten (autenticación, estado de mantenimiento, webhooks)
+        const allowedPaths = [
+            '/auth/login',
+            '/auth/',
+            '/settings/maintenance',
+            '/admin/settings/maintenance',
+            '/payments/confirm',
+            '/payments/return',
+        ];
+        if (allowedPaths.some((path) => url.startsWith(path))) {
             return true;
         }
 
@@ -28,11 +40,16 @@ export class MaintenanceGuard implements CanActivate {
             return true;
         }
 
-        // Bloquear a todos los demás (incluidas rutas @Public)
+        // Permitir solicitudes GET para que los usuarios puedan navegar el sitio/catálogo
+        if (method === 'GET') {
+            return true;
+        }
+
+        // Bloquear operaciones de escritura/compras durante mantenimiento para usuarios normales
         throw new HttpException(
             {
                 statusCode: 503,
-                message: 'Sitio en mantenimiento. Vuelve pronto.',
+                message: 'Sitio en mantenimiento. Las compras están temporalmente deshabilitadas.',
                 maintenance: true,
             },
             HttpStatus.SERVICE_UNAVAILABLE,

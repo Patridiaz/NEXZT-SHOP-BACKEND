@@ -6,7 +6,6 @@ import { Brand } from 'src/brands/brand.entity';
 import { Game } from 'src/games/game.entity';
 import { Edition } from 'src/editions/edition.entity';
 import { Rarity } from 'src/rarities/rarity.entity';
-import { ProductCategory } from 'src/products/enums/product-category.enum';
 
 @Injectable()
 export class ExcelService {
@@ -17,52 +16,64 @@ export class ExcelService {
     private readonly entityManager: EntityManager,
   ) { }
 
-  // ✅ CORRECCIÓN AQUÍ: Eliminamos ': Promise<Buffer>' de la firma de la función.
   async generateProductTemplate() {
     const workbook = new Workbook();
 
     // --- Hoja 0: Instrucciones ---
     const helpSheet = workbook.addWorksheet('Instrucciones');
-    helpSheet.columns = [{ header: 'Instrucción', key: 'text', width: 80 }];
-    helpSheet.addRow({ text: 'GUÍA DE CARGA MASIVA DE PRODUCTOS' });
+    helpSheet.columns = [{ header: 'Instrucción', key: 'text', width: 90 }];
+    helpSheet.addRow({ text: 'GUÍA DE CARGA MASIVA DE PRODUCTOS - NEXT Z SHOP' });
     helpSheet.addRow({ text: '--------------------------------------------------' });
     helpSheet.addRow({ text: '1. Los productos se procesan únicamente desde la hoja "Plantilla Productos".' });
     helpSheet.addRow({ text: '2. CAMPOS OBLIGATORIOS: code, name, price, stock y brandName.' });
     helpSheet.addRow({ text: '3. LÓGICA DE ACTUALIZACIÓN (UPSERT):' });
-    helpSheet.addRow({ text: '   - Si el "code" ya existe, el producto se ACTUALIZARÁ con los nuevos datos.' });
+    helpSheet.addRow({ text: '   - Si el "code" ya existe en el sistema, el producto se ACTUALIZARÁ con los nuevos datos.' });
     helpSheet.addRow({ text: '   - Si el "code" NO existe, se CREARÁ un nuevo producto.' });
-    helpSheet.addRow({ text: '4. RELACIONES: La Marca, Juego, Edición y Rareza deben existir previamente en el sistema.' });
+    helpSheet.addRow({ text: '4. VISIBILIDAD (isVisible):' });
+    helpSheet.addRow({ text: '   - Escribe "SI" para que el producto sea visible en el catálogo de la tienda.' });
+    helpSheet.addRow({ text: '   - Escribe "NO" para guardarlo como borrador/oculto (no visible para clientes).' });
+    helpSheet.addRow({ text: '   - Si se deja en blanco, los productos nuevos serán visibles ("SI") y los existentes mantendrán su estado.' });
+    helpSheet.addRow({ text: '5. RELACIONES: La Marca, Juego, Edición y Rareza deben existir previamente en el sistema.' });
     helpSheet.addRow({ text: '   - Consulta las pestañas correspondientes para ver los nombres válidos.' });
-    helpSheet.addRow({ text: '5. FORMATOS:' });
-    helpSheet.addRow({ text: '   - isVisible: Escribe "SI" para que sea visible al público o "NO" para ocultarlo.' });
-    helpSheet.addRow({ text: '   - price / offerPrice: Solo números, sin puntos ni signos de peso.' });
-    helpSheet.addRow({ text: '   - imageUrl: URL completa de la imagen del producto.' });
+    helpSheet.addRow({ text: '6. FORMATOS:' });
+    helpSheet.addRow({ text: '   - price / offerPrice: Solo números enteros o decimales, sin signos de peso ni puntos separadores de miles.' });
+    helpSheet.addRow({ text: '   - imageUrl: URL completa o ruta de la imagen principal del producto.' });
     helpSheet.addRow({ text: '' });
-    helpSheet.addRow({ text: 'Asegúrate de no cambiar el nombre de las columnas ni de las hojas.' });
+    helpSheet.addRow({ text: 'Por favor, no modifiques los nombres de las columnas ni de las hojas del archivo.' });
 
     // --- Hoja 1: Plantilla de Productos ---
     const templateSheet = workbook.addWorksheet('Plantilla Productos');
     templateSheet.columns = [
       { header: 'code', key: 'code', width: 15 },
-      { header: 'name', key: 'name', width: 30 },
+      { header: 'name', key: 'name', width: 32 },
       { header: 'description', key: 'description', width: 40 },
-      { header: 'price', key: 'price', width: 10 },
+      { header: 'price', key: 'price', width: 12 },
       { header: 'stock', key: 'stock', width: 10 },
-      { header: 'brandName', key: 'brandName', width: 20 },
-      { header: 'gameName', key: 'gameName', width: 20 },
-      { header: 'editionName', key: 'editionName', width: 20 },
-      { header: 'categoryName', key: 'categoryName', width: 20 },
-      { header: 'rarityName', key: 'rarityName', width: 20 },
+      { header: 'brandName', key: 'brandName', width: 22 },
+      { header: 'gameName', key: 'gameName', width: 22 },
+      { header: 'editionName', key: 'editionName', width: 22 },
+      { header: 'categoryName', key: 'categoryName', width: 18 },
+      { header: 'rarityName', key: 'rarityName', width: 18 },
       { header: 'offerPrice', key: 'offerPrice', width: 15 },
       { header: 'purchaseLimit', key: 'purchaseLimit', width: 15 },
       { header: 'isVisible', key: 'isVisible', width: 15 },
-      { header: 'imageUrl', key: 'imageUrl', width: 30 },
+      { header: 'imageUrl', key: 'imageUrl', width: 35 },
     ];
+
+    // Ejemplo 1: Producto visible
     templateSheet.addRow({
-      code: 'PKM-001', name: 'Booster Box SV01', description: 'Caja de 36 sobres.',
+      code: 'PKM-001', name: 'Booster Box Scarlet & Violet', description: 'Caja sellada de 36 sobres de expansión.',
       price: 120000, stock: 50, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
       editionName: 'Scarlet & Violet', categoryName: 'carta', rarityName: 'Rare',
       offerPrice: 110000, purchaseLimit: 2, isVisible: 'SI', imageUrl: 'https://...'
+    });
+
+    // Ejemplo 2: Producto oculto (isVisible = NO)
+    templateSheet.addRow({
+      code: 'PKM-002', name: 'Charizard ex Secret Rare', description: 'Carta de colección en impecable estado.',
+      price: 85000, stock: 3, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
+      editionName: 'Scarlet & Violet', categoryName: 'carta', rarityName: 'Ultra Rare',
+      offerPrice: null, purchaseLimit: 1, isVisible: 'NO', imageUrl: 'https://...'
     });
 
     // --- Hojas de Datos de Referencia ---
@@ -84,7 +95,6 @@ export class ExcelService {
     editionsSheet.columns = [{ header: 'Nombre Edición', key: 'name', width: 30 }];
     editions.forEach(e => editionsSheet.addRow({ name: e.name }));
 
-    // ✅ NUEVA HOJA PARA LAS RAREZAS
     const raritiesSheet = workbook.addWorksheet('Rarezas Válidas');
     raritiesSheet.columns = [{ header: 'Nombre Rareza', key: 'name', width: 30 }];
     const rarities = await this.entityManager.getRepository(Rarity).find({ order: { name: 'ASC' } });

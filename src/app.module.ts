@@ -21,6 +21,7 @@ import { LocationsModule } from './locations/locations.module';
 import { CarouselModule } from './carousel/carousel.module';
 import { MailModule } from './mail/mail.module';
 import { RaritiesModule } from './rarities/rarities.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { RaritiesModule } from './rarities/rarities.module';
     CarouselModule,
     MailModule,
     RaritiesModule,
+    SettingsModule,
   ],
   providers: [
     {

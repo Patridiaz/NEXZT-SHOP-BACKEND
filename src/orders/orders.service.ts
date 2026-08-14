@@ -355,7 +355,7 @@ export class OrdersService {
     const formatDate = (d: Date) => new Date(d).toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
       const chunks: Buffer[] = [];
 
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -363,96 +363,112 @@ export class OrdersService {
       doc.on('error', reject);
 
       const logoPath = path.join(process.cwd(), 'uploads', 'logo Next Z.png');
+      const pageWidth = doc.page.width;
+      const margin = 40;
+      const contentWidth = pageWidth - (margin * 2);
 
-      // === HEADER ===
-      doc.rect(0, 0, doc.page.width, 100).fill('#c8102e');
+      // === HEADER BANNER ===
+      doc.rect(0, 0, pageWidth, 90).fill('#c8102e');
+      doc.rect(0, 90, pageWidth, 4).fill('#0f172a');
 
       if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 50, 20, { height: 60 });
+        doc.image(logoPath, margin, 18, { height: 54 });
       } else {
-        doc.fontSize(28).fillColor('#ffffff').text('NEXTZ', 50, 25, { align: 'left' });
+        doc.fontSize(24).font('Helvetica-Bold').fillColor('#ffffff').text('NEXT Z SHOP', margin, 25);
       }
 
-      doc.fillColor('#ffffff');
-      doc.fontSize(10).text('Comprobante oficial de anulación', 50, 80, { align: 'left' });
-      doc.fontSize(20).text('NOTA DE CRÉDITO', 0, 35, { align: 'right', width: doc.page.width - 50 });
-      doc.fontSize(14).text(`${creditNote.noteCode || 'NC-' + creditNote.id}`, 0, 65, { align: 'right', width: doc.page.width - 50 });
+      doc.fillColor('#ffffff').font('Helvetica').fontSize(8.5).text('COMPROBANTE OFICIAL DE ANULACIÓN', margin, 73);
 
-      doc.moveDown(4);
-      doc.fillColor('#000000');
+      // Title & Document Code Pill
+      doc.font('Helvetica-Bold').fontSize(16).fillColor('#ffffff').text('NOTA DE CRÉDITO', 0, 22, { align: 'right', width: pageWidth - margin });
+      
+      const codeText = creditNote.noteCode || `NC-${creditNote.id}`;
+      const codePillWidth = 140;
+      const codePillX = pageWidth - margin - codePillWidth;
+      doc.roundedRect(codePillX, 48, codePillWidth, 22, 5).fill('#0f172a');
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#fbbf24').text(codeText, codePillX, 53, { align: 'center', width: codePillWidth });
 
-      // === INFO NOTA DE CRÉDITO ===
-      const startY = 130;
-      doc.fontSize(10).fillColor('#666666');
-      doc.text('Fecha de emisión:', 50, startY);
-      doc.fillColor('#000000').text(formatDate(creditNote.createdAt), 180, startY);
+      // === SUMMARY CARD INFO ===
+      const cardY = 112;
+      const cardHeight = 90;
+      doc.roundedRect(margin, cardY, contentWidth, cardHeight, 8).fill('#f8fafc').strokeColor('#e2e8f0').lineWidth(1).stroke();
 
-      doc.fillColor('#666666').text('N° Pedido asociado:', 50, startY + 20);
-      doc.fillColor('#000000').text(`${order.orderCode}`, 180, startY + 20);
+      // Left Column
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('FECHA DE EMISIÓN', margin + 15, cardY + 12);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(formatDate(creditNote.createdAt), margin + 15, cardY + 24);
 
-      doc.fillColor('#666666').text('Cliente:', 50, startY + 40);
-      doc.fillColor('#000000').text(creditNote.customerEmail, 180, startY + 40);
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('PEDIDO ASOCIADO', margin + 15, cardY + 46);
+      doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#c8102e').text(order.orderCode || `#${order.id}`, margin + 15, cardY + 58);
 
-      if (creditNote.customerPhone) {
-        doc.fillColor('#666666').text('Teléfono:', 50, startY + 60);
-        doc.fillColor('#000000').text(creditNote.customerPhone, 180, startY + 60);
-      }
+      // Right Column
+      const rightColX = margin + (contentWidth / 2) + 10;
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('CLIENTE', rightColX, cardY + 12);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(creditNote.customerEmail, rightColX, cardY + 24, { width: 220 });
 
-      doc.fillColor('#666666').text('Cancelado por:', 50, startY + 80);
-      doc.fillColor('#000000').text(creditNote.cancelledBy, 180, startY + 80);
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('PROCESADO POR', rightColX, cardY + 46);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(creditNote.cancelledBy || 'Administración', rightColX, cardY + 58);
 
-      // === MOTIVO ===
-      doc.moveDown(2);
-      const reasonY = startY + 115;
-      doc.rect(50, reasonY, doc.page.width - 100, 50).fill('#fff3cd');
-      doc.fontSize(9).fillColor('#856404').text('Motivo de cancelación:', 60, reasonY + 10);
-      doc.fontSize(10).text(creditNote.reason, 60, reasonY + 25, { width: doc.page.width - 120 });
+      // === REASON BOX ===
+      const reasonY = cardY + cardHeight + 12;
+      const reasonHeight = 44;
+      doc.roundedRect(margin, reasonY, contentWidth, reasonHeight, 6).fill('#fffbeb').strokeColor('#fcd34d').lineWidth(1).stroke();
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#92400e').text('MOTIVO DE CANCELACIÓN:', margin + 12, reasonY + 8);
+      doc.font('Helvetica').fontSize(9).fillColor('#78350f').text(creditNote.reason || 'Sin motivo especificado', margin + 12, reasonY + 22, { width: contentWidth - 24 });
 
-      // === TABLA DE PRODUCTOS ===
-      let tableY = reasonY + 80;
-      doc.rect(50, tableY, doc.page.width - 100, 25).fill('#f5f5f5');
-      doc.fontSize(9).fillColor('#333333');
-      doc.text('Producto', 60, tableY + 7, { width: 200 });
-      doc.text('Cant.', 300, tableY + 7, { width: 50, align: 'center' });
-      doc.text('Precio Unit.', 360, tableY + 7, { width: 90, align: 'right' });
-      doc.text('Subtotal', 460, tableY + 7, { width: 80, align: 'right' });
+      // === PRODUCT TABLE ===
+      let tableY = reasonY + reasonHeight + 16;
+      doc.rect(margin, tableY, contentWidth, 24).fill('#1e293b');
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#ffffff');
+      doc.text('DESCRIPCIÓN DEL PRODUCTO', margin + 12, tableY + 7, { width: 230 });
+      doc.text('CANT.', margin + 250, tableY + 7, { width: 45, align: 'center' });
+      doc.text('PRECIO UNIT.', margin + 300, tableY + 7, { width: 90, align: 'right' });
+      doc.text('SUBTOTAL', margin + 395, tableY + 7, { width: 105, align: 'right' });
 
-      tableY += 25;
-      doc.fillColor('#000000');
+      tableY += 24;
 
-      if (order.items) {
+      if (order.items && order.items.length > 0) {
+        let isEven = false;
         for (const item of order.items) {
-          const name = item.product?.name || 'Producto eliminado';
-          doc.fontSize(9);
-          doc.text(name, 60, tableY + 5, { width: 230 });
-          doc.text(String(item.quantity), 300, tableY + 5, { width: 50, align: 'center' });
-          doc.text(formatCLP(Number(item.price)), 360, tableY + 5, { width: 90, align: 'right' });
-          doc.text(formatCLP(Number(item.price) * item.quantity), 460, tableY + 5, { width: 80, align: 'right' });
+          const name = item.product?.name || 'Producto';
+          const rowBg = isEven ? '#ffffff' : '#f8fafc';
+          isEven = !isEven;
 
-          tableY += 22;
-          doc.moveTo(50, tableY).lineTo(doc.page.width - 50, tableY).strokeColor('#eeeeee').stroke();
+          doc.rect(margin, tableY, contentWidth, 24).fill(rowBg);
+          doc.font('Helvetica').fontSize(9).fillColor('#0f172a');
+          doc.text(name, margin + 12, tableY + 7, { width: 230 });
+          doc.text(String(item.quantity), margin + 250, tableY + 7, { width: 45, align: 'center' });
+          doc.text(formatCLP(Number(item.price)), margin + 300, tableY + 7, { width: 90, align: 'right' });
+          doc.font('Helvetica-Bold').text(formatCLP(Number(item.price) * item.quantity), margin + 395, tableY + 7, { width: 105, align: 'right' });
+
+          tableY += 24;
+          doc.moveTo(margin, tableY).lineTo(margin + contentWidth, tableY).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
         }
       }
 
-      // === TOTALES ===
-      tableY += 15;
+      // === TOTALES BOX ===
+      tableY += 14;
+      const totalsBoxWidth = 220;
+      const totalsBoxX = margin + contentWidth - totalsBoxWidth;
+
       if (Number(order.shippingCost) > 0) {
-        doc.fontSize(10).fillColor('#666666').text('Costo Envío:', 360, tableY, { width: 90, align: 'right' });
-        doc.fillColor('#000000').text(formatCLP(Number(order.shippingCost)), 460, tableY, { width: 80, align: 'right' });
-        tableY += 20;
+        doc.font('Helvetica').fontSize(9).fillColor('#64748b').text('Costo de Envío:', totalsBoxX, tableY, { width: 100, align: 'right' });
+        doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(formatCLP(Number(order.shippingCost)), totalsBoxX + 105, tableY, { width: 115, align: 'right' });
+        tableY += 18;
       }
 
-      doc.rect(350, tableY - 5, 195, 30).fill('#c8102e');
-      doc.fontSize(12).fillColor('#ffffff');
-      doc.text('TOTAL NOTA:', 360, tableY + 2, { width: 90, align: 'right' });
-      doc.text(formatCLP(Number(creditNote.amount)), 460, tableY + 2, { width: 80, align: 'right' });
+      const totalCardHeight = 32;
+      doc.roundedRect(totalsBoxX, tableY, totalsBoxWidth, totalCardHeight, 6).fill('#c8102e');
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#ffffff').text('TOTAL NOTA:', totalsBoxX + 12, tableY + 9);
+      doc.font('Helvetica-Bold').fontSize(13).fillColor('#ffffff').text(formatCLP(Number(creditNote.amount)), totalsBoxX + 100, tableY + 9, { width: 110, align: 'right' });
 
       // === FOOTER ===
-      const footerY = doc.page.height - 80;
-      doc.rect(0, footerY, doc.page.width, 80).fill('#f39c12');
-      doc.fontSize(9).fillColor('#ffffff');
-      doc.text('Nextz se pondrá en contacto contigo vía telefónica o email para coordinar la devolución de tu dinero.', 50, footerY + 15, { align: 'center', width: doc.page.width - 100 });
-      doc.text(`© ${new Date().getFullYear()} Nextz. Todos los derechos reservados.`, 50, footerY + 40, { align: 'center', width: doc.page.width - 100 });
+      const footerHeight = 55;
+      const footerY = doc.page.height - footerHeight;
+      doc.rect(0, footerY, pageWidth, footerHeight).fill('#0f172a');
+      doc.rect(0, footerY, pageWidth, 3).fill('#c8102e');
+
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff').text('Next Z se pondrá en contacto contigo para coordinar la devolución de tu dinero.', 0, footerY + 14, { align: 'center', width: pageWidth });
+      doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(`contacto@nextz.cl  •  www.nextz.cl  •  © ${new Date().getFullYear()} Next Z Shop. Todos los derechos reservados.`, 0, footerY + 32, { align: 'center', width: pageWidth });
 
       doc.end();
     });
@@ -472,7 +488,7 @@ export class OrdersService {
     const formatDate = (d: Date) => new Date(d).toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
       const chunks: Buffer[] = [];
 
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -480,90 +496,114 @@ export class OrdersService {
       doc.on('error', reject);
 
       const logoPath = path.join(process.cwd(), 'uploads', 'logo Next Z.png');
+      const pageWidth = doc.page.width;
+      const margin = 40;
+      const contentWidth = pageWidth - (margin * 2);
 
-      // === HEADER ===
-      doc.rect(0, 0, doc.page.width, 100).fill('#c8102e');
+      // === HEADER BANNER ===
+      doc.rect(0, 0, pageWidth, 90).fill('#c8102e');
+      doc.rect(0, 90, pageWidth, 4).fill('#0f172a');
 
       if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 50, 20, { height: 60 });
+        doc.image(logoPath, margin, 18, { height: 54 });
       } else {
-        doc.fontSize(28).fillColor('#ffffff').text('NEXTZ', 50, 25, { align: 'left' });
+        doc.fontSize(24).font('Helvetica-Bold').fillColor('#ffffff').text('NEXT Z SHOP', margin, 25);
       }
 
-      doc.fillColor('#ffffff');
-      doc.fontSize(10).text('Comprobante oficial de compra', 50, 80, { align: 'left' });
-      doc.fontSize(20).text('ORDEN DE COMPRA', 0, 35, { align: 'right', width: doc.page.width - 50 });
-      doc.fontSize(14).text(`${order.orderCode || '#' + order.id}`, 0, 65, { align: 'right', width: doc.page.width - 50 });
+      doc.fillColor('#ffffff').font('Helvetica').fontSize(8.5).text('COMPROBANTE OFICIAL DE COMPRA', margin, 73);
 
-      doc.moveDown(4);
-      doc.fillColor('#000000');
+      // Title & Document Code Pill
+      doc.font('Helvetica-Bold').fontSize(16).fillColor('#ffffff').text('ORDEN DE COMPRA', 0, 22, { align: 'right', width: pageWidth - margin });
 
-      // === INFO PEDIDO ===
-      const startY = 130;
-      doc.fontSize(10).fillColor('#666666');
-      doc.text('Fecha de emisión:', 50, startY);
-      doc.fillColor('#000000').text(formatDate(order.createdAt), 180, startY);
+      const codeText = order.orderCode || `#${order.id}`;
+      const codePillWidth = 140;
+      const codePillX = pageWidth - margin - codePillWidth;
+      doc.roundedRect(codePillX, 48, codePillWidth, 22, 5).fill('#0f172a');
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#ffffff').text(codeText, codePillX, 53, { align: 'center', width: codePillWidth });
 
-      doc.fillColor('#666666').text('Estado del pedido:', 50, startY + 20);
-      doc.fillColor('#000000').text(`${order.status}`, 180, startY + 20);
+      // === SUMMARY CARD INFO ===
+      const cardY = 112;
+      const cardHeight = 90;
+      doc.roundedRect(margin, cardY, contentWidth, cardHeight, 8).fill('#f8fafc').strokeColor('#e2e8f0').lineWidth(1).stroke();
 
-      doc.fillColor('#666666').text('Cliente:', 50, startY + 40);
-      doc.fillColor('#000000').text(order.user?.email || order.guestEmail || 'N/A', 180, startY + 40);
+      // Left Column
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('FECHA DE EMISIÓN', margin + 15, cardY + 12);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(formatDate(order.createdAt), margin + 15, cardY + 24);
 
-      doc.fillColor('#666666').text('Dirección de Envío:', 50, startY + 60);
-      doc.fillColor('#000000').text(`${order.shippingAddress}, ${order.commune?.name || ''}, ${order.region?.name || ''}`, 180, startY + 60, { width: 350 });
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('CLIENTE', margin + 15, cardY + 46);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(order.user?.email || order.guestEmail || 'Cliente Registrado', margin + 15, cardY + 58, { width: 210 });
 
-      // === TABLA DE PRODUCTOS ===
-      let tableY = startY + 110;
-      doc.rect(50, tableY, doc.page.width - 100, 25).fill('#f5f5f5');
-      doc.fontSize(9).fillColor('#333333');
-      doc.text('Producto', 60, tableY + 7, { width: 200 });
-      doc.text('Cant.', 300, tableY + 7, { width: 50, align: 'center' });
-      doc.text('Precio Unit.', 360, tableY + 7, { width: 90, align: 'right' });
-      doc.text('Subtotal', 460, tableY + 7, { width: 80, align: 'right' });
+      // Right Column
+      const rightColX = margin + (contentWidth / 2) + 10;
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('ESTADO DEL PEDIDO', rightColX, cardY + 12);
+      
+      const statusText = (order.status || 'COMPLETADO').toUpperCase();
+      doc.roundedRect(rightColX, cardY + 24, 110, 18, 4).fill('#dcfce7');
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#15803d').text(statusText, rightColX, cardY + 28, { align: 'center', width: 110 });
 
-      tableY += 25;
-      doc.fillColor('#000000');
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#64748b').text('DIRECCIÓN DE ENTREGA', rightColX, cardY + 46);
+      const addressText = order.shippingAddress ? `${order.shippingAddress}, ${order.commune?.name || ''}` : 'Retiro en Tienda';
+      doc.font('Helvetica').fontSize(9).fillColor('#0f172a').text(addressText, rightColX, cardY + 58, { width: 220 });
 
-      if (order.items) {
+      // === PRODUCT TABLE ===
+      let tableY = cardY + cardHeight + 16;
+      doc.rect(margin, tableY, contentWidth, 24).fill('#1e293b');
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#ffffff');
+      doc.text('DESCRIPCIÓN DEL PRODUCTO', margin + 12, tableY + 7, { width: 230 });
+      doc.text('CANT.', margin + 250, tableY + 7, { width: 45, align: 'center' });
+      doc.text('PRECIO UNIT.', margin + 300, tableY + 7, { width: 90, align: 'right' });
+      doc.text('SUBTOTAL', margin + 395, tableY + 7, { width: 105, align: 'right' });
+
+      tableY += 24;
+
+      if (order.items && order.items.length > 0) {
+        let isEven = false;
         for (const item of order.items) {
-          const name = item.product?.name || 'Producto eliminado';
-          doc.fontSize(9);
-          doc.text(name, 60, tableY + 5, { width: 230 });
-          doc.text(String(item.quantity), 300, tableY + 5, { width: 50, align: 'center' });
-          doc.text(formatCLP(Number(item.price)), 360, tableY + 5, { width: 90, align: 'right' });
-          doc.text(formatCLP(Number(item.price) * item.quantity), 460, tableY + 5, { width: 80, align: 'right' });
+          const name = item.product?.name || 'Producto';
+          const rowBg = isEven ? '#ffffff' : '#f8fafc';
+          isEven = !isEven;
 
-          tableY += 22;
-          doc.moveTo(50, tableY).lineTo(doc.page.width - 50, tableY).strokeColor('#eeeeee').stroke();
+          doc.rect(margin, tableY, contentWidth, 24).fill(rowBg);
+          doc.font('Helvetica').fontSize(9).fillColor('#0f172a');
+          doc.text(name, margin + 12, tableY + 7, { width: 230 });
+          doc.text(String(item.quantity), margin + 250, tableY + 7, { width: 45, align: 'center' });
+          doc.text(formatCLP(Number(item.price)), margin + 300, tableY + 7, { width: 90, align: 'right' });
+          doc.font('Helvetica-Bold').text(formatCLP(Number(item.price) * item.quantity), margin + 395, tableY + 7, { width: 105, align: 'right' });
+
+          tableY += 24;
+          doc.moveTo(margin, tableY).lineTo(margin + contentWidth, tableY).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
         }
       }
 
-      // === TOTALES ===
-      tableY += 15;
-      const subtotal = order.items.reduce((acc, item) => acc + (Number(item.price) * item.quantity), 0);
+      // === TOTALES BOX ===
+      tableY += 14;
+      const subtotal = order.items ? order.items.reduce((acc, item) => acc + (Number(item.price) * item.quantity), 0) : Number(order.total);
+      const totalsBoxWidth = 220;
+      const totalsBoxX = margin + contentWidth - totalsBoxWidth;
 
-      doc.fontSize(10).fillColor('#666666').text('Subtotal:', 360, tableY, { width: 90, align: 'right' });
-      doc.fillColor('#000000').text(formatCLP(subtotal), 460, tableY, { width: 80, align: 'right' });
-      tableY += 20;
+      doc.font('Helvetica').fontSize(9).fillColor('#64748b').text('Subtotal:', totalsBoxX, tableY, { width: 100, align: 'right' });
+      doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(formatCLP(subtotal), totalsBoxX + 105, tableY, { width: 115, align: 'right' });
+      tableY += 18;
 
       if (Number(order.shippingCost) > 0) {
-        doc.fontSize(10).fillColor('#666666').text('Costo Envío:', 360, tableY, { width: 90, align: 'right' });
-        doc.fillColor('#000000').text(formatCLP(Number(order.shippingCost)), 460, tableY, { width: 80, align: 'right' });
-        tableY += 20;
+        doc.font('Helvetica').fontSize(9).fillColor('#64748b').text('Costo de Envío:', totalsBoxX, tableY, { width: 100, align: 'right' });
+        doc.font('Helvetica').fontSize(9.5).fillColor('#0f172a').text(formatCLP(Number(order.shippingCost)), totalsBoxX + 105, tableY, { width: 115, align: 'right' });
+        tableY += 18;
       }
 
-      doc.rect(350, tableY - 5, 195, 30).fill('#c8102e');
-      doc.fontSize(12).fillColor('#ffffff');
-      doc.text('TOTAL:', 360, tableY + 2, { width: 90, align: 'right' });
-      doc.text(formatCLP(Number(order.total)), 460, tableY + 2, { width: 80, align: 'right' });
+      const totalCardHeight = 32;
+      doc.roundedRect(totalsBoxX, tableY, totalsBoxWidth, totalCardHeight, 6).fill('#c8102e');
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#ffffff').text('TOTAL PAGADO:', totalsBoxX + 12, tableY + 9);
+      doc.font('Helvetica-Bold').fontSize(13).fillColor('#ffffff').text(formatCLP(Number(order.total)), totalsBoxX + 100, tableY + 9, { width: 110, align: 'right' });
 
       // === FOOTER ===
-      const footerY = doc.page.height - 60;
-      doc.rect(0, footerY, doc.page.width, 60).fill('#f39c12');
-      doc.fontSize(10).fillColor('#ffffff');
-      doc.text('Gracias por preferir Nextz.', 50, footerY + 15, { align: 'center', width: doc.page.width - 100 });
-      doc.text(`© ${new Date().getFullYear()} Nextz. Todos los derechos reservados.`, 50, footerY + 35, { align: 'center', width: doc.page.width - 100 });
+      const footerHeight = 55;
+      const footerY = doc.page.height - footerHeight;
+      doc.rect(0, footerY, pageWidth, footerHeight).fill('#0f172a');
+      doc.rect(0, footerY, pageWidth, 3).fill('#c8102e');
+
+      doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#ffffff').text('¡Gracias por tu compra en Next Z Shop!', 0, footerY + 14, { align: 'center', width: pageWidth });
+      doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(`contacto@nextz.cl  •  www.nextz.cl  •  © ${new Date().getFullYear()} Next Z Shop. Todos los derechos reservados.`, 0, footerY + 32, { align: 'center', width: pageWidth });
 
       doc.end();
     });

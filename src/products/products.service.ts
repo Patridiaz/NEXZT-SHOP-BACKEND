@@ -342,13 +342,12 @@ export class ProductService {
     const productsToUpsert: any[] = [];
     const rowsData: any[] = [];
 
-    // Primero, leemos todas las filas para poder hacer consultas optimizadas
+    // Leemos todas las filas ignorando la fila 1 de encabezados
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber === 1 || row.values.length === 0) return; // Ignora header y filas vacías
+      if (rowNumber === 1 || !row.values || row.values.length === 0) return;
       rowsData.push({ rowNumber, values: row.values as any });
     });
 
-    // ✅ Cargamos solo las entidades necesarias que se mencionan en el archivo
     const brandNames = new Set(rowsData.map(r => r.values[6]?.toString().trim()).filter(Boolean));
     const gameNames = new Set(rowsData.map(r => r.values[7]?.toString().trim()).filter(Boolean));
     const editionNames = new Set(rowsData.map(r => r.values[8]?.toString().trim()).filter(Boolean));
@@ -363,14 +362,24 @@ export class ProductService {
       this.productRepo.findBy({ code: In([...codesInExcel]) }),
     ]);
 
-    const brandMap = new Map(brands.map(b => [b.name, b]));
-    const gameMap = new Map(games.map(g => [g.name, g]));
-    const editionMap = new Map(editions.map(e => [e.name, e]));
-    const rarityMap = new Map(rarities.map(r => [r.name, r]));
+    // Maps case-insensitive para búsquedas sin fallos de mayúsculas/minúsculas
+    const brandMap = new Map(brands.map(b => [b.name.trim().toLowerCase(), b]));
+    const gameMap = new Map(games.map(g => [g.name.trim().toLowerCase(), g]));
+    const editionMap = new Map(editions.map(e => [e.name.trim().toLowerCase(), e]));
+    const rarityMap = new Map(rarities.map(r => [r.name.trim().toLowerCase(), r]));
     const existingProductsMap = new Map(existingProducts.map(p => [p.code, p]));
 
-    // Ahora procesamos los datos con las entidades ya cargadas
     for (const { rowNumber, values } of rowsData) {
+      const rawIsVisible = values[13];
+      let isVisibleStr = '';
+      if (rawIsVisible !== undefined && rawIsVisible !== null) {
+        if (typeof rawIsVisible === 'object' && rawIsVisible.result !== undefined) {
+          isVisibleStr = rawIsVisible.result.toString().trim().toUpperCase();
+        } else {
+          isVisibleStr = rawIsVisible.toString().trim().toUpperCase();
+        }
+      }
+
       const rowData = {
         code: values[1]?.toString().trim(),
         name: values[2]?.toString().trim(),
@@ -384,7 +393,7 @@ export class ProductService {
         rarityName: values[10]?.toString().trim(),
         offerPrice: values[11] ? parseFloat(values[11]) : undefined,
         purchaseLimit: values[12] ? parseInt(values[12], 10) : undefined,
-        isVisibleStr: values[13]?.toString().trim().toUpperCase(),
+        isVisibleStr,
         imageUrl: values[14]?.toString().trim(),
       };
 
@@ -394,64 +403,71 @@ export class ProductService {
         continue;
       }
 
-      const brand = brandMap.get(rowData.brandName);
+      const brand = brandMap.get(rowData.brandName.toLowerCase());
       if (!brand) {
-        errors.push({ row: rowNumber, message: `La marca '${rowData.brandName}' no fue encontrada. Regístrala primero.` });
+        errors.push({ row: rowNumber, message: `La marca '${rowData.brandName}' no fue encontrada en el sistema.` });
         continue;
       }
 
       let game: Game | null = null;
       if (rowData.gameName) {
-        game = gameMap.get(rowData.gameName) || null;
+        game = gameMap.get(rowData.gameName.toLowerCase()) || null;
         if (!game) {
-          errors.push({ row: rowNumber, message: `El juego '${rowData.gameName}' no fue encontrado.` });
+          errors.push({ row: rowNumber, message: `El juego '${rowData.gameName}' no fue encontrado en el sistema.` });
           continue;
         }
       }
 
       let edition: Edition | null = null;
       if (rowData.editionName) {
-        edition = editionMap.get(rowData.editionName) || null;
+        edition = editionMap.get(rowData.editionName.toLowerCase()) || null;
         if (!edition) {
-          errors.push({ row: rowNumber, message: `La edición '${rowData.editionName}' no fue encontrada.` });
+          errors.push({ row: rowNumber, message: `La edición '${rowData.editionName}' no fue encontrada en el sistema.` });
           continue;
         }
       }
 
       let rarity: Rarity | null = null;
       if (rowData.rarityName) {
-        rarity = rarityMap.get(rowData.rarityName) || null;
+        rarity = rarityMap.get(rowData.rarityName.toLowerCase()) || null;
         if (!rarity) {
-          errors.push({ row: rowNumber, message: `La rareza '${rowData.rarityName}' no fue encontrada.` });
+          errors.push({ row: rowNumber, message: `La rareza '${rowData.rarityName}' no fue encontrada en el sistema.` });
           continue;
         }
       }
 
-      if (rowData.categoryName && !Object.values(ProductCategory).includes(rowData.categoryName)) {
+      if (rowData.categoryName && !Object.values(ProductCategory).includes(rowData.categoryName.toLowerCase() as any)) {
         errors.push({ row: rowNumber, message: `Categoría inválida: '${rowData.categoryName}'.` });
         continue;
       }
 
-      // Procesar visibilidad (SI, YES, 1, TRUE -> true)
-      let isVisible = true;
-      if (rowData.isVisibleStr) {
-        isVisible = ['SI', 'S', 'YES', 'Y', 'TRUE', '1'].includes(rowData.isVisibleStr);
-      }
-
-      // Lógica de Upsert: buscar si ya existe para actualizar
       const existingProduct = existingProductsMap.get(rowData.code);
+
+      // Procesar visibilidad (SI, YES, 1, TRUE, VISIBLE -> true; NO, N, FALSE, 0, OCULTO, BORRADOR -> false)
+      let isVisible = true;
+      if (rowData.isVisibleStr !== '') {
+        if (['NO', 'N', 'FALSE', '0', 'NO VISIBLE', 'DESACTIVADO', 'OCULTO', 'BORRADOR'].includes(rowData.isVisibleStr)) {
+          isVisible = false;
+        } else if (['SI', 'S', 'YES', 'Y', 'TRUE', '1', 'VISIBLE', 'ACTIVADO', 'PUBLICADO'].includes(rowData.isVisibleStr)) {
+          isVisible = true;
+        } else if (existingProduct) {
+          isVisible = existingProduct.isVisible;
+        }
+      } else if (existingProduct) {
+        isVisible = existingProduct.isVisible;
+      }
 
       const productData = {
         ...(existingProduct || {}),
         code: rowData.code,
         name: rowData.name,
-        description: rowData.description || (existingProduct?.description),
+        description: rowData.description !== undefined && rowData.description !== '' ? rowData.description : (existingProduct?.description),
         price: rowData.price,
         stock: rowData.stock,
         brand,
         game,
         edition,
-        category: rowData.categoryName || (existingProduct?.category || ProductCategory.CARTA),
+        category: (rowData.categoryName?.toLowerCase() as ProductCategory) || (existingProduct?.category || ProductCategory.CARTA),
         rarity,
         offerPrice: (rowData.offerPrice !== undefined && !isNaN(rowData.offerPrice)) ? rowData.offerPrice : (existingProduct?.offerPrice),
         purchaseLimit: (rowData.purchaseLimit !== undefined && !isNaN(rowData.purchaseLimit)) ? rowData.purchaseLimit : (existingProduct?.purchaseLimit),
