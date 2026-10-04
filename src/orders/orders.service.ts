@@ -104,8 +104,12 @@ export class OrdersService {
           );
         }
 
-        if (product.stock < item.quantity) {
-          throw new BadRequestException(`Stock insuficiente para '${product.name}'.`);
+        const orderWebStockAvailable = (product.maxStock !== null && product.maxStock !== undefined)
+          ? Math.min(product.stock, product.maxStock)
+          : product.stock;
+
+        if (item.quantity > orderWebStockAvailable) {
+          throw new BadRequestException(`Stock disponible en la tienda web insuficiente para '${product.name}' (Máximo web disponible: ${orderWebStockAvailable}).`);
         }
       }
 

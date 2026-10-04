@@ -1,6 +1,6 @@
 // En src/auth/jwt-auth.guard.ts
 
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from './public.decorator';
@@ -32,7 +32,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     // En rutas protegidas: comportamiento normal (lanza excepción si no hay token)
     if (err || !user) {
-      throw err || new Error('Unauthorized');
+      throw err || new UnauthorizedException('Unauthorized');
     }
 
     return user;

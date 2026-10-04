@@ -45,6 +45,28 @@ export class CreateProductDto {
   @Min(0) // Stock can be 0
   stock: number;
 
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  costPrice?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  @Min(0)
+  minStock?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  @Min(0)
+  maxStock?: number;
+
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsPositive()

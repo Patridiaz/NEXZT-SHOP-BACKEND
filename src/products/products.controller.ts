@@ -85,6 +85,12 @@ export class ProductController {
   }
 
   @Public()
+  @Get('barcode/:barcode')
+  findByBarcode(@Param('barcode') barcode: string): Promise<Product> {
+    return this.productService.findByBarcode(barcode);
+  }
+
+  @Public()
   @Get(':id')
   findOne(
     @Param('id', ParseIntPipe) id: number // ✅ 2. Aplica el Pipe aquí

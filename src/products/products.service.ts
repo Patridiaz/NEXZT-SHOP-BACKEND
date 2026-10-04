@@ -12,6 +12,9 @@ import { OrderItem } from 'src/orders/order-item.entity';
 import { Workbook } from 'exceljs';
 import { Rarity } from 'src/rarities/rarity.entity';
 
+import { KardexService } from 'src/kardex/kardex.service';
+import { KardexMovementType } from 'src/kardex/enums/kardex-movement-type.enum';
+
 @Injectable()
 export class ProductService {
 
@@ -21,8 +24,14 @@ export class ProductService {
     @InjectRepository(Edition) private readonly editionRepo: Repository<Edition>,
     @InjectRepository(Game) private readonly gameRepo: Repository<Game>,
     @InjectRepository(Rarity) private readonly rarityRepo: Repository<Rarity>,
+    private readonly kardexService: KardexService,
     private entityManager: EntityManager,
   ) { }
+
+  private generateBarcode(): string {
+    const randomSuffix = Math.floor(10000000 + Math.random() * 90000000); // 8 dígitos aleatorios
+    return `NXZ-${randomSuffix}`;
+  }
 
   async create(dto: CreateProductDto, file: Express.Multer.File): Promise<Product> {
     const codeExists = await this.productRepo.findOneBy({ code: dto.code });
@@ -30,8 +39,24 @@ export class ProductService {
       throw new BadRequestException(`El código de producto ${dto.code} ya existe.`);
     }
 
-    // 1. Crea la instancia del producto con los datos básicos
-    const product = this.productRepo.create(dto);
+    if (dto.barcode) {
+      const barcodeExists = await this.productRepo.findOneBy({ barcode: dto.barcode });
+      if (barcodeExists) {
+        throw new BadRequestException(`El código de barras ${dto.barcode} ya está asignado a otro producto.`);
+      }
+    }
+
+    const initialStock = dto.stock !== undefined ? dto.stock : 0;
+
+    // 1. Crea la instancia del producto con stock inicial 0 (el movimiento de Kardex establecerá el stock real)
+    const product = this.productRepo.create({
+      ...dto,
+      stock: 0,
+      barcode: dto.barcode || this.generateBarcode(),
+      costPrice: dto.costPrice !== undefined ? dto.costPrice : 0,
+      minStock: dto.minStock !== undefined ? dto.minStock : 5,
+      maxStock: dto.maxStock !== undefined ? dto.maxStock : 100,
+    });
 
     // 2. Asigna la URL de la imagen
     if (file) {
@@ -61,8 +86,22 @@ export class ProductService {
       product.rarity = rarity;
     }
 
-    // 4. Guarda el nuevo producto
-    return this.productRepo.save(product);
+    // 4. Guarda el nuevo producto con stock 0
+    const savedProduct = await this.productRepo.save(product);
+
+    // 5. Registrar el stock inicial en el Kardex si es > 0 (kardexService sumará initialStock al 0 previo)
+    if (initialStock > 0) {
+      await this.kardexService.registerMovement({
+        productId: savedProduct.id,
+        movementType: KardexMovementType.ENTRADA_COMPRA,
+        quantity: initialStock,
+        unitCost: savedProduct.costPrice,
+        reference: 'Stock Inicial',
+        notes: 'Creación inicial del producto',
+      });
+    }
+
+    return (await this.productRepo.findOne({ where: { id: savedProduct.id } }))!;
   }
   // ✅ MÉTODO findAll OPTIMIZADO
   async findAll(filters: {
@@ -120,6 +159,7 @@ export class ProductService {
       query.andWhere(
         '(product.name ILIKE :search OR ' +
         'product.code ILIKE :search OR ' +
+        'product.barcode ILIKE :search OR ' +
         'brand.name ILIKE :search OR ' +
         'game.name ILIKE :search OR ' +
         'edition.name ILIKE :search)',
@@ -205,11 +245,30 @@ export class ProductService {
     return product;
   }
 
+  async findByBarcode(barcode: string): Promise<Product> {
+    const product = await this.productRepo.findOne({
+      where: [{ barcode }, { code: barcode }],
+      relations: ['brand', 'edition', 'game', 'rarity'],
+    });
+    if (!product) throw new NotFoundException(`Producto con código ${barcode} no fue encontrado`);
+    return product;
+  }
+
   async update(id: number, dto: UpdateProductDto, file?: Express.Multer.File): Promise<Product> {
-    // 1. Usamos 'preload' para cargar el producto y fusionar los datos simples del DTO
+    const existingProduct = await this.productRepo.findOne({ where: { id } });
+    if (!existingProduct) {
+      throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+    }
+
+    const previousStock = existingProduct.stock;
+    const targetStock = dto.stock;
+
+    // 1. Usamos 'preload' para cargar el producto manteniendo el stock previo intacto antes del Kardex
     const product = await this.productRepo.preload({
       id,
       ...dto,
+      stock: previousStock,
+      barcode: dto.barcode || existingProduct.barcode || this.generateBarcode(),
     });
     if (!product) {
       throw new NotFoundException(`Producto con ID ${id} no encontrado`);
@@ -231,7 +290,7 @@ export class ProductService {
       const game = await this.gameRepo.findOneBy({ id: dto.gameId });
       if (!game) throw new NotFoundException(`Juego con ID ${dto.gameId} no encontrado`);
       product.game = game;
-    } else if (dto.gameId === null) { // Permite desasociar un juego
+    } else if (dto.gameId === null) {
       product.game = null;
     }
 
@@ -239,7 +298,7 @@ export class ProductService {
       const edition = await this.editionRepo.findOneBy({ id: dto.editionId });
       if (!edition) throw new NotFoundException(`Edición con ID ${dto.editionId} no encontrada`);
       product.edition = edition;
-    } else if (dto.editionId === null) { // Permite desasociar una edición
+    } else if (dto.editionId === null) {
       product.edition = null;
     }
 
@@ -253,8 +312,24 @@ export class ProductService {
       }
     }
 
-    // 4. Guardamos el producto con todas sus relaciones actualizadas
-    return this.productRepo.save(product);
+    // 4. Guardamos el producto con el stock previo (sin alterar aún)
+    const savedProduct = await this.productRepo.save(product);
+
+    // 5. Auditar cambio manual de stock en Kardex si hubo diferencia
+    if (targetStock !== undefined && targetStock !== previousStock) {
+      const diff = targetStock - previousStock;
+      const movementType = diff > 0 ? KardexMovementType.AJUSTE_POSITIVO : KardexMovementType.AJUSTE_NEGATIVO;
+      await this.kardexService.registerMovement({
+        productId: savedProduct.id,
+        movementType,
+        quantity: Math.abs(diff),
+        unitCost: savedProduct.costPrice,
+        reference: 'Ajuste Manual Ficha Producto',
+        notes: `Modificación manual de stock de ${previousStock} a ${targetStock}`,
+      });
+    }
+
+    return (await this.productRepo.findOne({ where: { id: savedProduct.id } }))!;
   }
 
 
@@ -307,25 +382,17 @@ export class ProductService {
  * Utiliza una transacción para asegurar la consistencia de los datos.
  */
   async deductStock(items: OrderItem[]): Promise<void> {
-    await this.entityManager.transaction(async transactionalEntityManager => {
-      for (const item of items) {
-        const product = await transactionalEntityManager.findOne(Product, {
-          where: { id: item.product.id },
-          lock: { mode: 'pessimistic_write' }, // Bloquea la fila para evitar concurrencia
+    for (const item of items) {
+      if (item.product) {
+        await this.kardexService.registerMovement({
+          productId: item.product.id,
+          movementType: KardexMovementType.SALIDA_VENTA,
+          quantity: item.quantity,
+          reference: 'Venta Tienda Online',
+          notes: `Descuento automático por compra de ${item.quantity} un.`,
         });
-
-        if (!product) {
-          throw new NotFoundException(`Producto con ID ${item.product.id} no encontrado.`);
-        }
-
-        if (product.stock < item.quantity) {
-          throw new BadRequestException(`Stock insuficiente para el producto: ${product.name}`);
-        }
-
-        product.stock -= item.quantity;
-        await transactionalEntityManager.save(product);
       }
-    });
+    }
   }
 
 
@@ -348,29 +415,43 @@ export class ProductService {
       rowsData.push({ rowNumber, values: row.values as any });
     });
 
-    const brandNames = new Set(rowsData.map(r => r.values[6]?.toString().trim()).filter(Boolean));
-    const gameNames = new Set(rowsData.map(r => r.values[7]?.toString().trim()).filter(Boolean));
-    const editionNames = new Set(rowsData.map(r => r.values[8]?.toString().trim()).filter(Boolean));
-    const rarityNames = new Set(rowsData.map(r => r.values[10]?.toString().trim()).filter(Boolean));
+    const brandNames = new Set(rowsData.map(r => r.values[8]?.toString().trim()).filter(Boolean));
+    const gameNames = new Set(rowsData.map(r => r.values[9]?.toString().trim()).filter(Boolean));
+    const editionNames = new Set(rowsData.map(r => r.values[10]?.toString().trim()).filter(Boolean));
+    const rarityNames = new Set(rowsData.map(r => r.values[12]?.toString().trim()).filter(Boolean));
     const codesInExcel = new Set(rowsData.map(r => r.values[1]?.toString().trim()).filter(Boolean));
+    const barcodesInExcel = new Set(rowsData.map(r => r.values[2]?.toString().trim()).filter(Boolean));
 
-    const [brands, games, editions, rarities, existingProducts] = await Promise.all([
+    const [brands, games, editions, rarities, existingProductsByCode, existingProductsByBarcode] = await Promise.all([
       this.brandRepo.findBy({ name: In([...brandNames]) }),
       this.gameRepo.findBy({ name: In([...gameNames]) }),
       this.editionRepo.findBy({ name: In([...editionNames]) }),
       this.rarityRepo.findBy({ name: In([...rarityNames]) }),
       this.productRepo.findBy({ code: In([...codesInExcel]) }),
+      barcodesInExcel.size > 0 ? this.productRepo.findBy({ barcode: In([...barcodesInExcel]) }) : Promise.resolve([]),
     ]);
 
-    // Maps case-insensitive para búsquedas sin fallos de mayúsculas/minúsculas
+    // Maps case-insensitive para búsquedas
     const brandMap = new Map(brands.map(b => [b.name.trim().toLowerCase(), b]));
     const gameMap = new Map(games.map(g => [g.name.trim().toLowerCase(), g]));
     const editionMap = new Map(editions.map(e => [e.name.trim().toLowerCase(), e]));
     const rarityMap = new Map(rarities.map(r => [r.name.trim().toLowerCase(), r]));
-    const existingProductsMap = new Map(existingProducts.map(p => [p.code, p]));
+
+    const existingProductsMap = new Map<string, Product>();
+    existingProductsByCode.forEach(p => existingProductsMap.set(p.code, p));
+    existingProductsByBarcode.forEach(p => {
+      if (p.barcode) existingProductsMap.set(p.barcode, p);
+    });
+
+    const kardexMovementsToRegister: {
+      productId?: number;
+      productCode?: string;
+      quantity: number;
+      unitCost: number;
+    }[] = [];
 
     for (const { rowNumber, values } of rowsData) {
-      const rawIsVisible = values[13];
+      const rawIsVisible = values[15];
       let isVisibleStr = '';
       if (rawIsVisible !== undefined && rawIsVisible !== null) {
         if (typeof rawIsVisible === 'object' && rawIsVisible.result !== undefined) {
@@ -382,19 +463,21 @@ export class ProductService {
 
       const rowData = {
         code: values[1]?.toString().trim(),
-        name: values[2]?.toString().trim(),
-        description: values[3]?.toString().trim(),
-        price: parseFloat(values[4]),
-        stock: parseInt(values[5], 10),
-        brandName: values[6]?.toString().trim(),
-        gameName: values[7]?.toString().trim(),
-        editionName: values[8]?.toString().trim(),
-        categoryName: values[9]?.toString().trim() as ProductCategory | undefined,
-        rarityName: values[10]?.toString().trim(),
-        offerPrice: values[11] ? parseFloat(values[11]) : undefined,
-        purchaseLimit: values[12] ? parseInt(values[12], 10) : undefined,
+        barcode: values[2]?.toString().trim(),
+        name: values[3]?.toString().trim(),
+        description: values[4]?.toString().trim(),
+        costPrice: values[5] ? parseFloat(values[5]) : 0,
+        price: parseFloat(values[6]),
+        stock: parseInt(values[7], 10),
+        brandName: values[8]?.toString().trim(),
+        gameName: values[9]?.toString().trim(),
+        editionName: values[10]?.toString().trim(),
+        categoryName: values[11]?.toString().trim() as ProductCategory | undefined,
+        rarityName: values[12]?.toString().trim(),
+        offerPrice: values[13] ? parseFloat(values[13]) : undefined,
+        purchaseLimit: values[14] ? parseInt(values[14], 10) : undefined,
         isVisibleStr,
-        imageUrl: values[14]?.toString().trim(),
+        imageUrl: values[16]?.toString().trim(),
       };
 
       // --- Validar Fila ---
@@ -441,9 +524,9 @@ export class ProductService {
         continue;
       }
 
-      const existingProduct = existingProductsMap.get(rowData.code);
+      const existingProduct = existingProductsMap.get(rowData.code) || (rowData.barcode ? existingProductsMap.get(rowData.barcode) : undefined);
 
-      // Procesar visibilidad (SI, YES, 1, TRUE, VISIBLE -> true; NO, N, FALSE, 0, OCULTO, BORRADOR -> false)
+      // Procesar visibilidad
       let isVisible = true;
       if (rowData.isVisibleStr !== '') {
         if (['NO', 'N', 'FALSE', '0', 'NO VISIBLE', 'DESACTIVADO', 'OCULTO', 'BORRADOR'].includes(rowData.isVisibleStr)) {
@@ -457,13 +540,31 @@ export class ProductService {
         isVisible = existingProduct.isVisible;
       }
 
+      // Si el producto ya existe: sumar el nuevo stock y calcular costo promedio ponderado
+      const prevStock = existingProduct?.stock || 0;
+      let newStock = prevStock + rowData.stock;
+      let finalCostPrice = rowData.costPrice;
+      let barcodeToAssign = rowData.barcode || existingProduct?.barcode || this.generateBarcode();
+
+      if (existingProduct) {
+        if (rowData.costPrice > 0) {
+          const totalCostPrev = prevStock * Number(existingProduct.costPrice || 0);
+          const totalCostNew = rowData.stock * rowData.costPrice;
+          finalCostPrice = newStock > 0 ? Number(((totalCostPrev + totalCostNew) / newStock).toFixed(2)) : rowData.costPrice;
+        } else {
+          finalCostPrice = Number(existingProduct.costPrice || 0);
+        }
+      }
+
       const productData = {
         ...(existingProduct || {}),
         code: rowData.code,
+        barcode: barcodeToAssign,
         name: rowData.name,
         description: rowData.description !== undefined && rowData.description !== '' ? rowData.description : (existingProduct?.description),
+        costPrice: finalCostPrice,
         price: rowData.price,
-        stock: rowData.stock,
+        stock: prevStock, // Mantenemos prevStock para que kardexService aplique el incremento sin duplicar
         brand,
         game,
         edition,
@@ -476,6 +577,14 @@ export class ProductService {
       };
 
       productsToUpsert.push(productData);
+
+      if (rowData.stock > 0) {
+        kardexMovementsToRegister.push({
+          productCode: rowData.code,
+          quantity: rowData.stock,
+          unitCost: rowData.costPrice,
+        });
+      }
     }
 
     if (errors.length > 0) {
@@ -484,10 +593,27 @@ export class ProductService {
 
     // --- Guardar en una transacción ---
     try {
-      await this.entityManager.transaction(async transactionalEntityManager => {
-        await transactionalEntityManager.save(Product, productsToUpsert);
+      const savedProducts = await this.entityManager.transaction(async transactionalEntityManager => {
+        return await transactionalEntityManager.save(Product, productsToUpsert);
       });
-      return { message: `Carga exitosa: ${productsToUpsert.length} productos procesados (creados o actualizados).` };
+
+      // Registrar entradas en el Kardex
+      const savedProductsMap = new Map(savedProducts.map(p => [p.code, p]));
+      for (const m of kardexMovementsToRegister) {
+        const prod = savedProductsMap.get(m.productCode!);
+        if (prod) {
+          await this.kardexService.registerMovement({
+            productId: prod.id,
+            movementType: KardexMovementType.ENTRADA_CARGA_MASIVA,
+            quantity: m.quantity,
+            unitCost: m.unitCost,
+            reference: 'Carga Masiva Excel',
+            notes: `Ingreso masivo de ${m.quantity} unidades por archivo Excel`,
+          });
+        }
+      }
+
+      return { message: `Carga exitosa: ${productsToUpsert.length} productos procesados (creados o actualizados con Kardex auditado).` };
     } catch (error) {
       throw new BadRequestException(`Ocurrió un error al procesar el archivo: ${error.message}`);
     }

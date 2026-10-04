@@ -22,6 +22,7 @@ import { CarouselModule } from './carousel/carousel.module';
 import { MailModule } from './mail/mail.module';
 import { RaritiesModule } from './rarities/rarities.module';
 import { SettingsModule } from './settings/settings.module';
+import { KardexModule } from './kardex/kardex.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { SettingsModule } from './settings/settings.module';
     MailModule,
     RaritiesModule,
     SettingsModule,
+    KardexModule,
   ],
   providers: [
     {

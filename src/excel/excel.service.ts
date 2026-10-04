@@ -45,8 +45,10 @@ export class ExcelService {
     const templateSheet = workbook.addWorksheet('Plantilla Productos');
     templateSheet.columns = [
       { header: 'code', key: 'code', width: 15 },
+      { header: 'barcode', key: 'barcode', width: 18 },
       { header: 'name', key: 'name', width: 32 },
       { header: 'description', key: 'description', width: 40 },
+      { header: 'costPrice', key: 'costPrice', width: 14 },
       { header: 'price', key: 'price', width: 12 },
       { header: 'stock', key: 'stock', width: 10 },
       { header: 'brandName', key: 'brandName', width: 22 },
@@ -62,16 +64,16 @@ export class ExcelService {
 
     // Ejemplo 1: Producto visible
     templateSheet.addRow({
-      code: 'PKM-001', name: 'Booster Box Scarlet & Violet', description: 'Caja sellada de 36 sobres de expansión.',
-      price: 120000, stock: 50, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
+      code: 'PKM-001', barcode: '7801002003001', name: 'Booster Box Scarlet & Violet', description: 'Caja sellada de 36 sobres de expansión.',
+      costPrice: 85000, price: 120000, stock: 50, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
       editionName: 'Scarlet & Violet', categoryName: 'carta', rarityName: 'Rare',
       offerPrice: 110000, purchaseLimit: 2, isVisible: 'SI', imageUrl: 'https://...'
     });
 
-    // Ejemplo 2: Producto oculto (isVisible = NO)
+    // Ejemplo 2: Producto sin barcode explícito (se autogenerará si es nuevo)
     templateSheet.addRow({
-      code: 'PKM-002', name: 'Charizard ex Secret Rare', description: 'Carta de colección en impecable estado.',
-      price: 85000, stock: 3, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
+      code: 'PKM-002', barcode: '', name: 'Charizard ex Secret Rare', description: 'Carta de colección en impecable estado.',
+      costPrice: 60000, price: 85000, stock: 3, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
       editionName: 'Scarlet & Violet', categoryName: 'carta', rarityName: 'Ultra Rare',
       offerPrice: null, purchaseLimit: 1, isVisible: 'NO', imageUrl: 'https://...'
     });

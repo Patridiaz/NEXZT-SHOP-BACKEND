@@ -12,13 +12,16 @@ import { ProductController } from './products.controller';
 import { ProductService } from './products.service';
 import { ExcelModule } from 'src/excel/excel.module';
 
+import { KardexModule } from 'src/kardex/kardex.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product, Brand, Edition, Game, Rarity]),
     BrandsModule,
     EditionsModule,
     RaritiesModule,
-    ExcelModule
+    ExcelModule,
+    KardexModule,
   ],
   controllers: [ProductController],
   providers: [ProductService],

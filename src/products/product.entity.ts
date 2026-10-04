@@ -37,8 +37,20 @@ export class Product {
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   offerPrice: number;
 
+  @Column({ type: 'varchar', length: 100, unique: true, nullable: true })
+  barcode: string;
+
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  costPrice: number;
+
   @Column('int')
   stock: number;
+
+  @Column({ type: 'int', default: 5 })
+  minStock: number;
+
+  @Column({ type: 'int', default: 100 })
+  maxStock: number;
 
   @ManyToOne(() => Brand, (brand) => brand.products, { nullable: false })
   @JoinColumn({ name: 'brandId' })

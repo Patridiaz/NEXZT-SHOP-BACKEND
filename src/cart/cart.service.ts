@@ -74,8 +74,12 @@ export class CartService {
       );
     }
 
-    if (product.stock < newQuantity) {
-      throw new BadRequestException(`Stock insuficiente para '${product.name}'.`);
+    const userWebStockAvailable = (product.maxStock !== null && product.maxStock !== undefined)
+      ? Math.min(product.stock, product.maxStock)
+      : product.stock;
+
+    if (newQuantity > userWebStockAvailable) {
+      throw new BadRequestException(`Stock disponible en la tienda web insuficiente para '${product.name}' (Máximo web disponible: ${userWebStockAvailable}).`);
     }
 
     if (cartItem) {
@@ -111,8 +115,12 @@ export class CartService {
       );
     }
 
-    if (product.stock < newQuantity) {
-      throw new BadRequestException(`Stock insuficiente para '${product.name}'.`);
+    const guestWebStockAvailable = (product.maxStock !== null && product.maxStock !== undefined)
+      ? Math.min(product.stock, product.maxStock)
+      : product.stock;
+
+    if (newQuantity > guestWebStockAvailable) {
+      throw new BadRequestException(`Stock disponible en la tienda web insuficiente para '${product.name}' (Máximo web disponible: ${guestWebStockAvailable}).`);
     }
 
     if (cartItem) {
