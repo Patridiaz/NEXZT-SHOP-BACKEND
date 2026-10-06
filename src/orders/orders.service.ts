@@ -1,14 +1,16 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
-import { DeliveryStatus, Order, OrderStatus } from './order.entity';
+import { DeliveryStatus, Order, OrderStatus, OrderChannel, PaymentMethod } from './order.entity';
 import { OrderItem } from './order-item.entity';
 import { CreditNote } from './credit-note.entity';
 import { CartService } from '../cart/cart.service';
 import { User, UserRole } from '../users/user.entity'; // ✅ Importamos UserRole
 import { CartItem } from 'src/cart/cart.entity';
 import { Product } from 'src/products/product.entity';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreatePosOrderDto } from './dto/create-order.dto';
+import { Kardex } from 'src/kardex/kardex.entity';
+import { KardexMovementType } from 'src/kardex/enums/kardex-movement-type.enum';
 import { Region } from 'src/locations/region.entity';
 import { Commune } from 'src/locations/commune.entity';
 import { MailService } from 'src/mail/mail.service';
@@ -242,9 +244,107 @@ export class OrdersService {
     return this.findOrderById(orderId);
   }
 
-  async findAll() {
+  async createPosOrder(dto: CreatePosOrderDto, cashierUser: User): Promise<Order> {
+    return this.entityManager.transaction(async transactionalEntityManager => {
+      if (!dto.items || dto.items.length === 0) {
+        throw new BadRequestException('El carrito del POS está vacío.');
+      }
+
+      const orderItems: OrderItem[] = [];
+      let totalAmount = 0;
+
+      for (const itemDto of dto.items) {
+        const product = await transactionalEntityManager.findOne(Product, {
+          where: { id: itemDto.productId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!product) {
+          throw new BadRequestException(`Producto con ID ${itemDto.productId} no encontrado.`);
+        }
+
+        if (product.stock < itemDto.quantity) {
+          throw new BadRequestException(`Stock físico insuficiente para '${product.name}' (Disponible: ${product.stock}, Solicitado: ${itemDto.quantity}).`);
+        }
+
+        const unitPrice = itemDto.price !== undefined && itemDto.price !== null
+          ? itemDto.price
+          : ((product.offerPrice && product.offerPrice > 0) ? product.offerPrice : product.price);
+
+        const previousStock = product.stock;
+        const newStock = product.stock - itemDto.quantity;
+
+        // Descontar stock directamente de la tienda física
+        product.stock = newStock;
+        await transactionalEntityManager.save(product);
+
+        // Crear ítem de la orden
+        const orderItem = new OrderItem();
+        orderItem.product = product;
+        orderItem.quantity = itemDto.quantity;
+        orderItem.price = unitPrice;
+        orderItems.push(orderItem);
+
+        totalAmount += Number(unitPrice) * itemDto.quantity;
+
+        // Registrar movimiento en el Kardex
+        const kardex = new Kardex();
+        kardex.product = product;
+        kardex.movementType = KardexMovementType.SALIDA_VENTA;
+        kardex.quantity = itemDto.quantity;
+        kardex.previousStock = previousStock;
+        kardex.newStock = newStock;
+        kardex.unitCost = Number(product.costPrice || 0);
+        kardex.totalValue = Number(unitPrice) * itemDto.quantity;
+        kardex.reference = `VENTA_POS`;
+        kardex.notes = `Venta POS por ${cashierUser.name || cashierUser.email}`;
+        kardex.user = cashierUser;
+        await transactionalEntityManager.save(kardex);
+      }
+
+      const timestampCode = Date.now().toString().slice(-6);
+      const randomCode = Math.floor(Math.random() * 90 + 10);
+      const posOrderCode = `#POS-${timestampCode}${randomCode}`;
+
+      const order = new Order();
+      order.orderCode = posOrderCode;
+      order.items = orderItems;
+      order.total = totalAmount;
+      order.shippingCost = 0;
+      order.status = OrderStatus.PAID;
+      order.deliveryStatus = DeliveryStatus.DELIVERED;
+      order.channel = OrderChannel.POS;
+      order.paymentMethod = (dto.paymentMethod || PaymentMethod.EFECTIVO) as any;
+      order.customerName = dto.customerName || 'Público General';
+      order.customerRut = dto.customerRut || null;
+      order.customerEmail = dto.customerEmail || null;
+      order.customerPhone = dto.customerPhone || null;
+      order.cashReceived = dto.cashReceived || totalAmount;
+      order.changeGiven = dto.changeGiven || 0;
+      order.seller = cashierUser;
+      order.sellerId = cashierUser.id;
+
+      const savedOrder = await transactionalEntityManager.save(order);
+
+      // Actualizar referencia kardex con el número de orden generado
+      await transactionalEntityManager.createQueryBuilder()
+        .update(Kardex)
+        .set({ reference: posOrderCode })
+        .where('reference = :ref AND user_id = :userId', { ref: 'VENTA_POS', userId: cashierUser.id })
+        .execute();
+
+      return savedOrder;
+    });
+  }
+
+  async findAll(channel?: string) {
+    const where: any = {};
+    if (channel && channel !== 'ALL' && channel !== 'TODOS') {
+      where.channel = channel;
+    }
     return this.ordersRepo.find({
-      relations: ['user', 'items', 'items.product', 'region', 'commune'],
+      where,
+      relations: ['user', 'seller', 'items', 'items.product', 'region', 'commune'],
       order: { createdAt: 'DESC' }
     });
   }

@@ -1,19 +1,28 @@
-import { Controller, Get, Post, UseGuards, Req, Body, Param, ParseIntPipe, Patch, Res } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Req, Body, Param, ParseIntPipe, Patch, Res, Query } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard'; // 👈 Importa el nuevo guard
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreatePosOrderDto } from './dto/create-order.dto';
 import type { Request, Response } from 'express';
 import { Public } from 'src/auth/public.decorator';
 import { RolesGuard } from 'src/auth/roles.guard';
 import { Roles } from 'src/auth/roles.decorator';
 import { UserRole } from 'src/users/user.entity';
-import { DeliveryStatus } from './order.entity';
+import { DeliveryStatus, OrderChannel } from './order.entity';
 
 @Controller('orders')
 // ❌ YA NO PONEMOS UN GUARDIA A NIVEL DE CLASE
 export class OrdersController {
   constructor(private ordersService: OrdersService) { }
+
+  // ✅ RUTA PARA CREAR UNA ORDEN POS (PUNTO DE VENTA EN TIENDA FÍSICA)
+  @Post('pos')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  createPosOrder(@Body() createPosOrderDto: CreatePosOrderDto, @Req() req: Request) {
+    const user = req.user as any;
+    return this.ordersService.createPosOrder(createPosOrderDto, user);
+  }
 
   // ✅ RUTA PARA CREAR UNA ORDEN (INVITADO O LOGUEADO)
   // Como no tiene @UseGuards(JwtAuthGuard), el guardia global se activa.
@@ -52,8 +61,8 @@ export class OrdersController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard) // Protege esta ruta específica
   @Roles(UserRole.ADMIN) // Solo rol admin
-  findAll() {
-    return this.ordersService.findAll();
+  findAll(@Query('channel') channel?: OrderChannel) {
+    return this.ordersService.findAll(channel);
   }
 
   @Patch(':id/delivery-status')

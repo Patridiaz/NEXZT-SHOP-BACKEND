@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsArray, ValidateNested, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsArray, ValidateNested, IsOptional, IsString, MinLength, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class GuestCartItemDto {
@@ -52,4 +52,53 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => GuestCartItemDto)
   guestCart?: GuestCartItemDto[];
+}
+
+export class PosItemDto {
+  @IsNotEmpty()
+  productId: number;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(1)
+  quantity: number;
+
+  @IsOptional()
+  @IsNumber()
+  price?: number;
+}
+
+export class CreatePosOrderDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PosItemDto)
+  items: PosItemDto[];
+
+  @IsNotEmpty()
+  @IsString()
+  paymentMethod: string;
+
+  @IsOptional()
+  @IsString()
+  customerName?: string;
+
+  @IsOptional()
+  @IsString()
+  customerRut?: string;
+
+  @IsOptional()
+  @IsString()
+  customerEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  customerPhone?: string;
+
+  @IsOptional()
+  @IsNumber()
+  cashReceived?: number;
+
+  @IsOptional()
+  @IsNumber()
+  changeGiven?: number;
 }

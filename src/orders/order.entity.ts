@@ -18,6 +18,19 @@ export enum DeliveryStatus {
   DELIVERED = 'DELIVERED',
 }
 
+export enum OrderChannel {
+  WEB = 'WEB',
+  POS = 'POS',
+}
+
+export enum PaymentMethod {
+  WEBPAY = 'WEBPAY',
+  EFECTIVO = 'EFECTIVO',
+  DEBITO = 'DEBITO',
+  CREDITO = 'CREDITO',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+}
+
 @Entity()
 export class Order {
   @PrimaryGeneratedColumn()
@@ -35,6 +48,41 @@ export class Order {
 
   @Column({ type: 'varchar', nullable: true })
   guestEmail: string | null;
+
+  // Canal de venta (WEB o POS)
+  @Column({ type: 'varchar', default: 'WEB' })
+  channel: string;
+
+  // Método de Pago (WEBPAY, EFECTIVO, DEBITO, CREDITO, TRANSFERENCIA)
+  @Column({ type: 'varchar', default: 'WEBPAY' })
+  paymentMethod: string;
+
+  // Datos del Cliente POS
+  @Column({ type: 'varchar', nullable: true })
+  customerName: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  customerRut: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  customerEmail: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  customerPhone: string | null;
+
+  // Vendedor / Cajero que atendió en POS
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  seller: User | null;
+
+  @Column({ type: 'int', nullable: true })
+  sellerId: number | null;
+
+  // Detalles de Vuelto / Efectivo recibidos en POS
+  @Column('decimal', { precision: 10, scale: 0, default: 0 })
+  cashReceived: number;
+
+  @Column('decimal', { precision: 10, scale: 0, default: 0 })
+  changeGiven: number;
 
   @Column({ nullable: true })
   shippingAddress: string;
