@@ -1,7 +1,7 @@
 import { Edition } from 'src/editions/edition.entity';
 import { Product } from 'src/products/product.entity';
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
-
+import { Subdivision } from 'src/subdivisions/subdivision.entity';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToMany, JoinTable } from 'typeorm';
 
 @Entity('games')
 export class Game {
@@ -17,7 +17,15 @@ export class Game {
   @OneToMany(() => Edition, (edition) => edition.game)
   editions: Edition[];
 
-  @Column({ default: false })
+  @ManyToMany(() => Subdivision, (subdivision) => subdivision.games)
+  @JoinTable({
+    name: 'game_subdivisions',
+    joinColumn: { name: 'game_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'subdivision_id', referencedColumnName: 'id' },
+  })
+  subdivisions: Subdivision[];
+
+  @Column({ default: true })
   showInNavbar: boolean;
 
   @Column({ default: 0 })

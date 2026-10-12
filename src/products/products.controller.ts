@@ -1,5 +1,18 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Query, ParseEnumPipe, DefaultValuePipe, ParseIntPipe, NotFoundException, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, Res, BadRequestException, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Query, ParseEnumPipe, DefaultValuePipe, ParseIntPipe, NotFoundException, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, FileValidator, Res, BadRequestException, UseGuards, ForbiddenException } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
+
+export class ExcelFileValidator extends FileValidator {
+  isValid(file?: Express.Multer.File): boolean {
+    if (!file) return false;
+    const isValidExt = /\.(xlsx|xls)$/i.test(file.originalname);
+    const isValidMime = /(sheet|excel|xlsx|xls|octet-stream|zip)/i.test(file.mimetype);
+    return isValidExt || isValidMime;
+  }
+
+  buildErrorMessage(): string {
+    return 'El archivo debe ser un documento Excel válido (.xlsx o .xls).';
+  }
+}
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductService } from './products.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -49,6 +62,7 @@ export class ProductController {
     @Query('gameId', new ParseIntPipe({ optional: true })) gameId?: number,
     @Query('editionId', new ParseIntPipe({ optional: true })) editionId?: number,
     @Query('rarityId', new ParseIntPipe({ optional: true })) rarityId?: number,
+    @Query('subdivisionId', new ParseIntPipe({ optional: true })) subdivisionId?: number,
     @Query('code') code?: string,
     @Query('name') name?: string,
     @Query('showHidden') showHidden?: string,
@@ -63,6 +77,7 @@ export class ProductController {
       gameId,
       editionId,
       rarityId,
+      subdivisionId,
       sort,
       order,
       code,
@@ -88,6 +103,15 @@ export class ProductController {
   @Get('barcode/:barcode')
   findByBarcode(@Param('barcode') barcode: string): Promise<Product> {
     return this.productService.findByBarcode(barcode);
+  }
+
+  // --- Endpoints de Carga Masiva ---
+  @Get('bulk/template')
+  async downloadTemplate(@Res() res: Response) {
+    const buffer = await this.excelService.generateProductTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=plantilla_productos.xlsx');
+    res.send(buffer);
   }
 
   @Public()
@@ -121,13 +145,19 @@ export class ProductController {
     return this.productService.remove(+id);
   }
 
-  // --- Endpoints de Carga Masiva ---
-  @Get('bulk/template')
-  async downloadTemplate(@Res() res: Response) {
-    const buffer = await this.excelService.generateProductTemplate();
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=plantilla_productos.xlsx');
-    res.send(buffer);
+  @Post('bulk/preview')
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkPreview(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
+          new ExcelFileValidator({}),
+        ],
+      }),
+    ) file: Express.Multer.File,
+  ) {
+    return this.productService.bulkPreview(file.buffer);
   }
 
   @Post('bulk')
@@ -136,8 +166,8 @@ export class ProductController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
+          new ExcelFileValidator({}),
         ],
       }),
     ) file: Express.Multer.File,

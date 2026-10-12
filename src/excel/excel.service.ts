@@ -6,6 +6,7 @@ import { Brand } from 'src/brands/brand.entity';
 import { Game } from 'src/games/game.entity';
 import { Edition } from 'src/editions/edition.entity';
 import { Rarity } from 'src/rarities/rarity.entity';
+import { Subdivision } from 'src/subdivisions/subdivision.entity';
 
 @Injectable()
 export class ExcelService {
@@ -13,6 +14,7 @@ export class ExcelService {
     @InjectRepository(Brand) private readonly brandRepo: Repository<Brand>,
     @InjectRepository(Game) private readonly gameRepo: Repository<Game>,
     @InjectRepository(Edition) private readonly editionRepo: Repository<Edition>,
+    @InjectRepository(Subdivision) private readonly subdivisionRepo: Repository<Subdivision>,
     private readonly entityManager: EntityManager,
   ) { }
 
@@ -33,8 +35,9 @@ export class ExcelService {
     helpSheet.addRow({ text: '   - Escribe "SI" para que el producto sea visible en el catálogo de la tienda.' });
     helpSheet.addRow({ text: '   - Escribe "NO" para guardarlo como borrador/oculto (no visible para clientes).' });
     helpSheet.addRow({ text: '   - Si se deja en blanco, los productos nuevos serán visibles ("SI") y los existentes mantendrán su estado.' });
-    helpSheet.addRow({ text: '5. RELACIONES: La Marca, Juego, Edición y Rareza deben existir previamente en el sistema.' });
-    helpSheet.addRow({ text: '   - Consulta las pestañas correspondientes para ver los nombres válidos.' });
+    helpSheet.addRow({ text: '5. RELACIONES (Marca, Juego, Edición, Subdivisión, Rareza):' });
+    helpSheet.addRow({ text: '   - Si la Marca, Juego, Edición, Subdivisión o Rareza NO existen en el sistema, se CREARÁN AUTOMÁTICAMENTE al procesar la carga.' });
+    helpSheet.addRow({ text: '   - Si se especifica una Subdivisión junto a un Juego, dicha subdivisión quedará automáticamente asociada al juego.' });
     helpSheet.addRow({ text: '6. FORMATOS:' });
     helpSheet.addRow({ text: '   - price / offerPrice: Solo números enteros o decimales, sin signos de peso ni puntos separadores de miles.' });
     helpSheet.addRow({ text: '   - imageUrl: URL completa o ruta de la imagen principal del producto.' });
@@ -54,7 +57,7 @@ export class ExcelService {
       { header: 'brandName', key: 'brandName', width: 22 },
       { header: 'gameName', key: 'gameName', width: 22 },
       { header: 'editionName', key: 'editionName', width: 22 },
-      { header: 'categoryName', key: 'categoryName', width: 18 },
+      { header: 'subdivisionName', key: 'subdivisionName', width: 22 },
       { header: 'rarityName', key: 'rarityName', width: 18 },
       { header: 'offerPrice', key: 'offerPrice', width: 15 },
       { header: 'purchaseLimit', key: 'purchaseLimit', width: 15 },
@@ -62,27 +65,33 @@ export class ExcelService {
       { header: 'imageUrl', key: 'imageUrl', width: 35 },
     ];
 
-    // Ejemplo 1: Producto visible
+    // --- Item de prueba único ---
     templateSheet.addRow({
-      code: 'PKM-001', barcode: '7801002003001', name: 'Booster Box Scarlet & Violet', description: 'Caja sellada de 36 sobres de expansión.',
-      costPrice: 85000, price: 120000, stock: 50, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
-      editionName: 'Scarlet & Violet', categoryName: 'carta', rarityName: 'Rare',
-      offerPrice: 110000, purchaseLimit: 2, isVisible: 'SI', imageUrl: 'https://...'
-    });
-
-    // Ejemplo 2: Producto sin barcode explícito (se autogenerará si es nuevo)
-    templateSheet.addRow({
-      code: 'PKM-002', barcode: '', name: 'Charizard ex Secret Rare', description: 'Carta de colección en impecable estado.',
-      costPrice: 60000, price: 85000, stock: 3, brandName: 'Pokemon Company', gameName: 'Pokémon TCG',
-      editionName: 'Scarlet & Violet', categoryName: 'carta', rarityName: 'Ultra Rare',
-      offerPrice: null, purchaseLimit: 1, isVisible: 'NO', imageUrl: 'https://...'
+      code: 'PROD-001',
+      barcode: '7801002003001',
+      name: 'Producto de Prueba',
+      description: 'Descripción del producto de prueba para carga masiva',
+      costPrice: 5000,
+      price: 10000,
+      stock: 20,
+      brandName: 'Marca de Prueba',
+      gameName: 'Juego de Prueba',
+      editionName: 'Edición de Prueba',
+      subdivisionName: 'Productos Sellados',
+      rarityName: 'Rare',
+      offerPrice: 8990,
+      purchaseLimit: 5,
+      isVisible: 'SI',
+      imageUrl: 'https://via.placeholder.com/300'
     });
 
     // --- Hojas de Datos de Referencia ---
-    const [brands, games, editions] = await Promise.all([
+    const [brands, games, editions, subdivisions, rarities] = await Promise.all([
       this.brandRepo.find({ order: { name: 'ASC' } }),
       this.gameRepo.find({ order: { name: 'ASC' } }),
       this.editionRepo.find({ order: { name: 'ASC' } }),
+      this.subdivisionRepo.find({ order: { name: 'ASC' } }),
+      this.entityManager.getRepository(Rarity).find({ order: { name: 'ASC' } }),
     ]);
 
     const brandsSheet = workbook.addWorksheet('Marcas Válidas');
@@ -97,16 +106,13 @@ export class ExcelService {
     editionsSheet.columns = [{ header: 'Nombre Edición', key: 'name', width: 30 }];
     editions.forEach(e => editionsSheet.addRow({ name: e.name }));
 
+    const subdivisionsSheet = workbook.addWorksheet('Subdivisiones Válidas');
+    subdivisionsSheet.columns = [{ header: 'Nombre Subdivisión', key: 'name', width: 30 }];
+    subdivisions.forEach(s => subdivisionsSheet.addRow({ name: s.name }));
+
     const raritiesSheet = workbook.addWorksheet('Rarezas Válidas');
     raritiesSheet.columns = [{ header: 'Nombre Rareza', key: 'name', width: 30 }];
-    const rarities = await this.entityManager.getRepository(Rarity).find({ order: { name: 'ASC' } });
     rarities.forEach(r => raritiesSheet.addRow({ name: r.name }));
-
-    const categorySheet = workbook.addWorksheet('Categorías Válidas');
-    categorySheet.columns = [{ header: 'Nombre Categoría', key: 'name', width: 30 }];
-    categorySheet.addRow({ name: 'carta' });
-    categorySheet.addRow({ name: 'figura' });
-    categorySheet.addRow({ name: 'accesorio' });
 
     return await workbook.xlsx.writeBuffer();
   }

@@ -29,6 +29,13 @@ export class SettingsService implements OnModuleInit {
           value: envInitial ? 'true' : 'false',
         });
         await this.settingsRepository.save(maintenanceSetting);
+      } else if (process.env.MAINTENANCE_MODE !== undefined) {
+        const envValue = process.env.MAINTENANCE_MODE.trim().toLowerCase() === 'true';
+        const currentValue = maintenanceSetting.value?.toString().trim().toLowerCase() === 'true';
+        if (currentValue !== envValue) {
+          maintenanceSetting.value = envValue ? 'true' : 'false';
+          await this.settingsRepository.save(maintenanceSetting);
+        }
       }
 
       this.isMaintenanceMode = maintenanceSetting.value?.toString().trim().toLowerCase() === 'true';

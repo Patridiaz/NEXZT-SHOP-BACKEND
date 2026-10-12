@@ -19,11 +19,13 @@ export class GamesController {
     return this.gameService.findAll();
   }
 
+  @Public()
   @Get()
   findAll(): Promise<Game[]> {
     return this.gameService.findAll();
   }
 
+  @Public()
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number): Promise<Game> {
     return this.gameService.findOne(id);

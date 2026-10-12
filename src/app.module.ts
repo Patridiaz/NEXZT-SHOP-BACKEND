@@ -23,6 +23,7 @@ import { MailModule } from './mail/mail.module';
 import { RaritiesModule } from './rarities/rarities.module';
 import { SettingsModule } from './settings/settings.module';
 import { KardexModule } from './kardex/kardex.module';
+import { SubdivisionsModule } from './subdivisions/subdivisions.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { KardexModule } from './kardex/kardex.module';
     RaritiesModule,
     SettingsModule,
     KardexModule,
+    SubdivisionsModule,
   ],
   providers: [
     {

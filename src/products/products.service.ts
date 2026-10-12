@@ -11,6 +11,7 @@ import { ProductCategory } from './enums/product-category.enum';
 import { OrderItem } from 'src/orders/order-item.entity';
 import { Workbook } from 'exceljs';
 import { Rarity } from 'src/rarities/rarity.entity';
+import { Subdivision } from 'src/subdivisions/subdivision.entity';
 
 import { KardexService } from 'src/kardex/kardex.service';
 import { KardexMovementType } from 'src/kardex/enums/kardex-movement-type.enum';
@@ -24,6 +25,7 @@ export class ProductService {
     @InjectRepository(Edition) private readonly editionRepo: Repository<Edition>,
     @InjectRepository(Game) private readonly gameRepo: Repository<Game>,
     @InjectRepository(Rarity) private readonly rarityRepo: Repository<Rarity>,
+    @InjectRepository(Subdivision) private readonly subdivisionRepo: Repository<Subdivision>,
     private readonly kardexService: KardexService,
     private entityManager: EntityManager,
   ) { }
@@ -61,6 +63,8 @@ export class ProductService {
     // 2. Asigna la URL de la imagen
     if (file) {
       product.imageUrl = `/uploads/${file.filename}`;
+    } else if (!product.imageUrl) {
+      product.imageUrl = '/uploads/defecto-img.png';
     }
 
     // ✅ 3. Busca y asigna TODAS las relaciones
@@ -86,6 +90,12 @@ export class ProductService {
       product.rarity = rarity;
     }
 
+    if (dto.subdivisionId) {
+      const subdivision = await this.subdivisionRepo.findOneBy({ id: dto.subdivisionId });
+      if (!subdivision) throw new NotFoundException(`Subdivisión con ID ${dto.subdivisionId} no encontrada`);
+      product.subdivision = subdivision;
+    }
+
     // 4. Guarda el nuevo producto con stock 0
     const savedProduct = await this.productRepo.save(product);
 
@@ -101,7 +111,10 @@ export class ProductService {
       });
     }
 
-    return (await this.productRepo.findOne({ where: { id: savedProduct.id } }))!;
+    return (await this.productRepo.findOne({
+      where: { id: savedProduct.id },
+      relations: ['brand', 'edition', 'game', 'rarity', 'subdivision'],
+    }))!;
   }
   // ✅ MÉTODO findAll OPTIMIZADO
   async findAll(filters: {
@@ -111,6 +124,7 @@ export class ProductService {
     gameId?: number;
     editionId?: number;
     rarityId?: number;
+    subdivisionId?: number;
     code?: string;
     name?: string;
     page?: number;
@@ -130,6 +144,7 @@ export class ProductService {
       editionId,
       category,
       rarityId,
+      subdivisionId,
       code,
       name,
       sort = 'name',
@@ -139,14 +154,15 @@ export class ProductService {
 
     // LOG PARA DEBUG EN LA TERMINAL (Ayuda al usuario a ver qué llega del frontend)
     console.log('[DEBUG] Products Search Params:', {
-      search, category, game, gameId, brandId, editionId, rarityId
+      search, category, game, gameId, brandId, editionId, rarityId, subdivisionId
     });
 
     const query = this.productRepo.createQueryBuilder('product')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.game', 'game')
       .leftJoinAndSelect('product.edition', 'edition')
-      .leftJoinAndSelect('product.rarity', 'rarity');
+      .leftJoinAndSelect('product.rarity', 'rarity')
+      .leftJoinAndSelect('product.subdivision', 'subdivision');
 
     // Solo mostrar productos visibles en la tienda pública
     if (!showHidden) {
@@ -190,6 +206,7 @@ export class ProductService {
     if (gameId) query.andWhere('game.id = :gameId', { gameId });
     if (editionId) query.andWhere('edition.id = :editionId', { editionId });
     if (rarityId) query.andWhere('rarity.id = :rarityId', { rarityId });
+    if (subdivisionId) query.andWhere('subdivision.id = :subdivisionId', { subdivisionId });
     if (category && category !== 'undefined' && category !== 'null' && category !== 'all') {
       query.andWhere('product.category = :category', { category });
     }
@@ -239,7 +256,7 @@ export class ProductService {
   async findOne(id: number): Promise<Product> {
     const product = await this.productRepo.findOne({
       where: { id },
-      relations: ['brand', 'edition', 'game', 'rarity'],
+      relations: ['brand', 'edition', 'game', 'rarity', 'subdivision'],
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
@@ -248,7 +265,7 @@ export class ProductService {
   async findByBarcode(barcode: string): Promise<Product> {
     const product = await this.productRepo.findOne({
       where: [{ barcode }, { code: barcode }],
-      relations: ['brand', 'edition', 'game', 'rarity'],
+      relations: ['brand', 'edition', 'game', 'rarity', 'subdivision'],
     });
     if (!product) throw new NotFoundException(`Producto con código ${barcode} no fue encontrado`);
     return product;
@@ -312,6 +329,16 @@ export class ProductService {
       }
     }
 
+    if (dto.subdivisionId !== undefined) {
+      if (dto.subdivisionId === null) {
+        product.subdivision = null;
+      } else {
+        const subdivision = await this.subdivisionRepo.findOneBy({ id: dto.subdivisionId });
+        if (!subdivision) throw new NotFoundException(`Subdivisión con ID ${dto.subdivisionId} no encontrada`);
+        product.subdivision = subdivision;
+      }
+    }
+
     // 4. Guardamos el producto con el stock previo (sin alterar aún)
     const savedProduct = await this.productRepo.save(product);
 
@@ -329,7 +356,10 @@ export class ProductService {
       });
     }
 
-    return (await this.productRepo.findOne({ where: { id: savedProduct.id } }))!;
+    return (await this.productRepo.findOne({
+      where: { id: savedProduct.id },
+      relations: ['brand', 'edition', 'game', 'rarity', 'subdivision'],
+    }))!;
   }
 
 
@@ -396,18 +426,291 @@ export class ProductService {
   }
 
 
-  async bulkCreate(fileBuffer) {
+  async bulkPreview(fileBuffer: any) {
     const workbook = new Workbook();
     await workbook.xlsx.load(fileBuffer);
-    const worksheet = workbook.getWorksheet('Plantilla Productos');
+
+    let worksheet = workbook.getWorksheet('Plantilla Productos');
+    if (!worksheet) {
+      worksheet = workbook.worksheets.find(ws => ws.name.trim().toLowerCase() === 'plantilla productos')
+        || workbook.worksheets.find(ws => ws.name.trim().toLowerCase() !== 'instrucciones')
+        || workbook.worksheets[0];
+    }
 
     if (!worksheet) {
-      throw new BadRequestException('El archivo Excel no contiene la hoja requerida "Plantilla Productos".');
+      throw new BadRequestException('El archivo Excel no contiene hojas de datos válidas.');
+    }
+
+    const errors: { row: number; message: string }[] = [];
+    const rowsData: any[] = [];
+
+    const getCellValue = (val: any): string => {
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') {
+        if (val.result !== undefined && val.result !== null) return val.result.toString().trim();
+        if (val.text !== undefined && val.text !== null) return val.text.toString().trim();
+        if (Array.isArray(val.richText)) return val.richText.map((r: any) => r.text || '').join('').trim();
+      }
+      return val.toString().trim();
+    };
+
+    // Mapeo dinámico de encabezados
+    const headerMap = new Map<string, number>();
+    const headerRow = worksheet.getRow(1);
+    if (headerRow && headerRow.values) {
+      const hValues = headerRow.values as any[];
+      hValues.forEach((val, idx) => {
+        if (val) {
+          const str = getCellValue(val).toLowerCase().replace(/[^a-z0-9]/g, '');
+          headerMap.set(str, idx);
+        }
+      });
+    }
+
+    const getCol = (values: any[], aliases: string[], fallbackIdx: number): string => {
+      for (const alias of aliases) {
+        const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const idx = headerMap.get(cleanAlias);
+        if (idx !== undefined && values[idx] !== undefined) {
+          return getCellValue(values[idx]);
+        }
+      }
+      return values[fallbackIdx] !== undefined ? getCellValue(values[fallbackIdx]) : '';
+    };
+
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber === 1 || !row.values || row.values.length === 0) return;
+      rowsData.push({ rowNumber, values: row.values as any });
+    });
+
+    if (rowsData.length === 0) {
+      throw new BadRequestException('El archivo Excel no contiene filas de datos para procesar.');
+    }
+
+    const brandNames = new Set(rowsData.map(r => getCol(r.values, ['brandname', 'brand', 'marca'], 8)).filter(Boolean));
+    const gameNames = new Set(rowsData.map(r => getCol(r.values, ['gamename', 'game', 'juego'], 9)).filter(Boolean));
+    const editionNames = new Set(rowsData.map(r => getCol(r.values, ['editionname', 'edition', 'edicion'], 10)).filter(Boolean));
+    const rarityNames = new Set(rowsData.map(r => getCol(r.values, ['rarityname', 'rarity', 'rareza'], 12)).filter(Boolean));
+    const codesInExcel = new Set(rowsData.map(r => getCol(r.values, ['code', 'codigo'], 1)).filter(Boolean));
+    const barcodesInExcel = new Set(rowsData.map(r => getCol(r.values, ['barcode', 'codigobarras'], 2)).filter(Boolean));
+
+    const hasSubdivisionHeader = ['subdivisionname', 'subdivision', 'subdivisiones'].some(a => headerMap.has(a));
+    const hasCategoryHeader = ['categoryname', 'category', 'categoria'].some(a => headerMap.has(a));
+
+    const subdivisionNames = new Set(rowsData.map(r => {
+      if (hasSubdivisionHeader) {
+        return getCol(r.values, ['subdivisionname', 'subdivision', 'subdivisiones'], 11);
+      } else if (!hasCategoryHeader) {
+        return getCellValue(r.values[11]);
+      }
+      return '';
+    }).filter(Boolean));
+
+    const [brands, games, editions, rarities, subdivisions, existingProductsByCode, existingProductsByBarcode] = await Promise.all([
+      brandNames.size > 0 ? this.brandRepo.findBy({ name: In([...brandNames]) }) : Promise.resolve([]),
+      gameNames.size > 0 ? this.gameRepo.find({ where: { name: In([...gameNames]) }, relations: ['subdivisions'] }) : Promise.resolve([]),
+      editionNames.size > 0 ? this.editionRepo.findBy({ name: In([...editionNames]) }) : Promise.resolve([]),
+      rarityNames.size > 0 ? this.rarityRepo.findBy({ name: In([...rarityNames]) }) : Promise.resolve([]),
+      subdivisionNames.size > 0 ? this.subdivisionRepo.findBy({ name: In([...subdivisionNames]) }) : Promise.resolve([]),
+      codesInExcel.size > 0 ? this.productRepo.findBy({ code: In([...codesInExcel]) }) : Promise.resolve([]),
+      barcodesInExcel.size > 0 ? this.productRepo.findBy({ barcode: In([...barcodesInExcel]) }) : Promise.resolve([]),
+    ]);
+
+    const brandMap = new Map(brands.map(b => [b.name.trim().toLowerCase(), b]));
+    const gameMap = new Map(games.map(g => [g.name.trim().toLowerCase(), g]));
+    const editionMap = new Map(editions.map(e => [e.name.trim().toLowerCase(), e]));
+    const rarityMap = new Map(rarities.map(r => [r.name.trim().toLowerCase(), r]));
+    const subdivisionMap = new Map(subdivisions.map(s => [s.name.trim().toLowerCase(), s]));
+
+    const existingProductsMap = new Map<string, Product>();
+    existingProductsByCode.forEach(p => existingProductsMap.set(p.code, p));
+    existingProductsByBarcode.forEach(p => {
+      if (p.barcode) existingProductsMap.set(p.barcode, p);
+    });
+
+    const items: any[] = [];
+    const autoCreatedBrands = new Set<string>();
+    const autoCreatedGames = new Set<string>();
+    const autoCreatedEditions = new Set<string>();
+    const autoCreatedRarities = new Set<string>();
+    const autoCreatedSubdivisions = new Set<string>();
+
+    for (const { rowNumber, values } of rowsData) {
+      const isVisibleStr = getCol(values, ['isvisible', 'visible'], 15).toUpperCase();
+      const rawCostPrice = getCol(values, ['costprice', 'costo', 'preciocosto'], 5);
+      const rawPrice = getCol(values, ['price', 'precio'], 6);
+      const rawStock = getCol(values, ['stock', 'cantidad'], 7);
+      const rawOfferPrice = getCol(values, ['offerprice', 'preciooferta'], 13);
+      const rawPurchaseLimit = getCol(values, ['purchaselimit', 'limitedecompra'], 14);
+
+      let rowSubdivisionName = '';
+      if (hasSubdivisionHeader) {
+        rowSubdivisionName = getCol(values, ['subdivisionname', 'subdivision', 'subdivisiones'], 11);
+      } else if (!hasCategoryHeader) {
+        rowSubdivisionName = getCellValue(values[11]);
+      }
+
+      let rowCategoryName: ProductCategory | undefined = undefined;
+      if (hasCategoryHeader) {
+        const catVal = getCol(values, ['categoryname', 'category', 'categoria'], 11).toLowerCase();
+        if (Object.values(ProductCategory).includes(catVal as any)) {
+          rowCategoryName = catVal as ProductCategory;
+        }
+      }
+
+      const rowData = {
+        code: getCol(values, ['code', 'codigo'], 1),
+        barcode: getCol(values, ['barcode', 'codigobarras'], 2),
+        name: getCol(values, ['name', 'nombre'], 3),
+        description: getCol(values, ['description', 'descripcion'], 4),
+        costPrice: rawCostPrice ? parseFloat(rawCostPrice) : 0,
+        price: parseFloat(rawPrice),
+        stock: parseInt(rawStock, 10),
+        brandName: getCol(values, ['brandname', 'brand', 'marca'], 8),
+        gameName: getCol(values, ['gamename', 'game', 'juego'], 9),
+        editionName: getCol(values, ['editionname', 'edition', 'edicion'], 10),
+        subdivisionName: rowSubdivisionName,
+        categoryName: rowCategoryName,
+        rarityName: getCol(values, ['rarityname', 'rarity', 'rareza'], 12),
+        offerPrice: rawOfferPrice ? parseFloat(rawOfferPrice) : undefined,
+        purchaseLimit: rawPurchaseLimit ? parseInt(rawPurchaseLimit, 10) : undefined,
+        isVisibleStr,
+        imageUrl: getCol(values, ['imageurl', 'image', 'imagen'], 16),
+      };
+
+      if (!rowData.code || !rowData.name || isNaN(rowData.price) || isNaN(rowData.stock) || !rowData.brandName) {
+        errors.push({ row: rowNumber, message: 'Las columnas code, name, price, stock y brandName son obligatorias.' });
+        continue;
+      }
+
+      if (!brandMap.has(rowData.brandName.toLowerCase())) {
+        autoCreatedBrands.add(rowData.brandName);
+      }
+      if (rowData.gameName && !gameMap.has(rowData.gameName.toLowerCase())) {
+        autoCreatedGames.add(rowData.gameName);
+      }
+      if (rowData.editionName && !editionMap.has(rowData.editionName.toLowerCase())) {
+        autoCreatedEditions.add(rowData.editionName);
+      }
+      if (rowData.subdivisionName && !subdivisionMap.has(rowData.subdivisionName.toLowerCase())) {
+        autoCreatedSubdivisions.add(rowData.subdivisionName);
+      }
+      if (rowData.rarityName && !rarityMap.has(rowData.rarityName.toLowerCase())) {
+        autoCreatedRarities.add(rowData.rarityName);
+      }
+
+      const existingProduct = existingProductsMap.get(rowData.code) || (rowData.barcode ? existingProductsMap.get(rowData.barcode) : undefined);
+      const isNew = !existingProduct;
+
+      let isVisible = true;
+      if (rowData.isVisibleStr !== '') {
+        if (['NO', 'N', 'FALSE', '0', 'NO VISIBLE', 'DESACTIVADO', 'OCULTO', 'BORRADOR'].includes(rowData.isVisibleStr)) {
+          isVisible = false;
+        } else if (['SI', 'S', 'YES', 'Y', 'TRUE', '1', 'VISIBLE', 'ACTIVADO', 'PUBLICADO'].includes(rowData.isVisibleStr)) {
+          isVisible = true;
+        } else if (existingProduct) {
+          isVisible = existingProduct.isVisible;
+        }
+      } else if (existingProduct) {
+        isVisible = existingProduct.isVisible;
+      }
+
+      const currentStock = existingProduct?.stock || 0;
+      const newTotalStock = currentStock + rowData.stock;
+
+      items.push({
+        rowNumber,
+        code: rowData.code,
+        barcode: rowData.barcode || existingProduct?.barcode || '(Autogenerado)',
+        name: rowData.name,
+        brandName: rowData.brandName,
+        gameName: rowData.gameName || '-',
+        editionName: rowData.editionName || '-',
+        subdivisionName: rowData.subdivisionName || '-',
+        rarityName: rowData.rarityName || '-',
+        price: rowData.price,
+        costPrice: rowData.costPrice,
+        stockToAdd: rowData.stock,
+        currentStock,
+        newTotalStock,
+        isNew,
+        status: isNew ? 'NUEVO' : 'ACTUALIZACIÓN',
+        isVisible,
+      });
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException({ message: 'Se encontraron errores en el archivo Excel.', errors });
+    }
+
+    return {
+      valid: true,
+      totalRows: items.length,
+      toCreateCount: items.filter(i => i.isNew).length,
+      toUpdateCount: items.filter(i => !i.isNew).length,
+      autoCreatedRelations: {
+        brands: Array.from(autoCreatedBrands),
+        games: Array.from(autoCreatedGames),
+        editions: Array.from(autoCreatedEditions),
+        rarities: Array.from(autoCreatedRarities),
+        subdivisions: Array.from(autoCreatedSubdivisions),
+      },
+      items,
+    };
+  }
+
+  async bulkCreate(fileBuffer: any) {
+    const workbook = new Workbook();
+    await workbook.xlsx.load(fileBuffer);
+
+    let worksheet = workbook.getWorksheet('Plantilla Productos');
+    if (!worksheet) {
+      worksheet = workbook.worksheets.find(ws => ws.name.trim().toLowerCase() === 'plantilla productos')
+        || workbook.worksheets.find(ws => ws.name.trim().toLowerCase() !== 'instrucciones')
+        || workbook.worksheets[0];
+    }
+
+    if (!worksheet) {
+      throw new BadRequestException('El archivo Excel no contiene hojas de datos válidas.');
     }
 
     const errors: { row: number; message: string }[] = [];
     const productsToUpsert: any[] = [];
     const rowsData: any[] = [];
+
+    const getCellValue = (val: any): string => {
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') {
+        if (val.result !== undefined && val.result !== null) return val.result.toString().trim();
+        if (val.text !== undefined && val.text !== null) return val.text.toString().trim();
+        if (Array.isArray(val.richText)) return val.richText.map((r: any) => r.text || '').join('').trim();
+      }
+      return val.toString().trim();
+    };
+
+    // Mapeo dinámico de encabezados
+    const headerMap = new Map<string, number>();
+    const headerRow = worksheet.getRow(1);
+    if (headerRow && headerRow.values) {
+      const hValues = headerRow.values as any[];
+      hValues.forEach((val, idx) => {
+        if (val) {
+          const str = getCellValue(val).toLowerCase().replace(/[^a-z0-9]/g, '');
+          headerMap.set(str, idx);
+        }
+      });
+    }
+
+    const getCol = (values: any[], aliases: string[], fallbackIdx: number): string => {
+      for (const alias of aliases) {
+        const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const idx = headerMap.get(cleanAlias);
+        if (idx !== undefined && values[idx] !== undefined) {
+          return getCellValue(values[idx]);
+        }
+      }
+      return values[fallbackIdx] !== undefined ? getCellValue(values[fallbackIdx]) : '';
+    };
 
     // Leemos todas las filas ignorando la fila 1 de encabezados
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -415,19 +718,36 @@ export class ProductService {
       rowsData.push({ rowNumber, values: row.values as any });
     });
 
-    const brandNames = new Set(rowsData.map(r => r.values[8]?.toString().trim()).filter(Boolean));
-    const gameNames = new Set(rowsData.map(r => r.values[9]?.toString().trim()).filter(Boolean));
-    const editionNames = new Set(rowsData.map(r => r.values[10]?.toString().trim()).filter(Boolean));
-    const rarityNames = new Set(rowsData.map(r => r.values[12]?.toString().trim()).filter(Boolean));
-    const codesInExcel = new Set(rowsData.map(r => r.values[1]?.toString().trim()).filter(Boolean));
-    const barcodesInExcel = new Set(rowsData.map(r => r.values[2]?.toString().trim()).filter(Boolean));
+    if (rowsData.length === 0) {
+      throw new BadRequestException('El archivo Excel no contiene filas de datos para procesar.');
+    }
 
-    const [brands, games, editions, rarities, existingProductsByCode, existingProductsByBarcode] = await Promise.all([
-      this.brandRepo.findBy({ name: In([...brandNames]) }),
-      this.gameRepo.findBy({ name: In([...gameNames]) }),
-      this.editionRepo.findBy({ name: In([...editionNames]) }),
-      this.rarityRepo.findBy({ name: In([...rarityNames]) }),
-      this.productRepo.findBy({ code: In([...codesInExcel]) }),
+    const brandNames = new Set(rowsData.map(r => getCol(r.values, ['brandname', 'brand', 'marca'], 8)).filter(Boolean));
+    const gameNames = new Set(rowsData.map(r => getCol(r.values, ['gamename', 'game', 'juego'], 9)).filter(Boolean));
+    const editionNames = new Set(rowsData.map(r => getCol(r.values, ['editionname', 'edition', 'edicion'], 10)).filter(Boolean));
+    const rarityNames = new Set(rowsData.map(r => getCol(r.values, ['rarityname', 'rarity', 'rareza'], 12)).filter(Boolean));
+    const codesInExcel = new Set(rowsData.map(r => getCol(r.values, ['code', 'codigo'], 1)).filter(Boolean));
+    const barcodesInExcel = new Set(rowsData.map(r => getCol(r.values, ['barcode', 'codigobarras'], 2)).filter(Boolean));
+
+    const hasSubdivisionHeader = ['subdivisionname', 'subdivision', 'subdivisiones'].some(a => headerMap.has(a));
+    const hasCategoryHeader = ['categoryname', 'category', 'categoria'].some(a => headerMap.has(a));
+
+    const subdivisionNames = new Set(rowsData.map(r => {
+      if (hasSubdivisionHeader) {
+        return getCol(r.values, ['subdivisionname', 'subdivision', 'subdivisiones'], 11);
+      } else if (!hasCategoryHeader) {
+        return getCellValue(r.values[11]);
+      }
+      return '';
+    }).filter(Boolean));
+
+    const [brands, games, editions, rarities, subdivisions, existingProductsByCode, existingProductsByBarcode] = await Promise.all([
+      brandNames.size > 0 ? this.brandRepo.findBy({ name: In([...brandNames]) }) : Promise.resolve([]),
+      gameNames.size > 0 ? this.gameRepo.find({ where: { name: In([...gameNames]) }, relations: ['subdivisions'] }) : Promise.resolve([]),
+      editionNames.size > 0 ? this.editionRepo.findBy({ name: In([...editionNames]) }) : Promise.resolve([]),
+      rarityNames.size > 0 ? this.rarityRepo.findBy({ name: In([...rarityNames]) }) : Promise.resolve([]),
+      subdivisionNames.size > 0 ? this.subdivisionRepo.findBy({ name: In([...subdivisionNames]) }) : Promise.resolve([]),
+      codesInExcel.size > 0 ? this.productRepo.findBy({ code: In([...codesInExcel]) }) : Promise.resolve([]),
       barcodesInExcel.size > 0 ? this.productRepo.findBy({ barcode: In([...barcodesInExcel]) }) : Promise.resolve([]),
     ]);
 
@@ -436,6 +756,7 @@ export class ProductService {
     const gameMap = new Map(games.map(g => [g.name.trim().toLowerCase(), g]));
     const editionMap = new Map(editions.map(e => [e.name.trim().toLowerCase(), e]));
     const rarityMap = new Map(rarities.map(r => [r.name.trim().toLowerCase(), r]));
+    const subdivisionMap = new Map(subdivisions.map(s => [s.name.trim().toLowerCase(), s]));
 
     const existingProductsMap = new Map<string, Product>();
     existingProductsByCode.forEach(p => existingProductsMap.set(p.code, p));
@@ -450,34 +771,56 @@ export class ProductService {
       unitCost: number;
     }[] = [];
 
+    const autoCreatedBrands = new Set<string>();
+    const autoCreatedGames = new Set<string>();
+    const autoCreatedEditions = new Set<string>();
+    const autoCreatedRarities = new Set<string>();
+    const autoCreatedSubdivisions = new Set<string>();
+
+    let createdProductsCount = 0;
+    let updatedProductsCount = 0;
+
     for (const { rowNumber, values } of rowsData) {
-      const rawIsVisible = values[15];
-      let isVisibleStr = '';
-      if (rawIsVisible !== undefined && rawIsVisible !== null) {
-        if (typeof rawIsVisible === 'object' && rawIsVisible.result !== undefined) {
-          isVisibleStr = rawIsVisible.result.toString().trim().toUpperCase();
-        } else {
-          isVisibleStr = rawIsVisible.toString().trim().toUpperCase();
+      const isVisibleStr = getCol(values, ['isvisible', 'visible'], 15).toUpperCase();
+      const rawCostPrice = getCol(values, ['costprice', 'costo', 'preciocosto'], 5);
+      const rawPrice = getCol(values, ['price', 'precio'], 6);
+      const rawStock = getCol(values, ['stock', 'cantidad'], 7);
+      const rawOfferPrice = getCol(values, ['offerprice', 'preciooferta'], 13);
+      const rawPurchaseLimit = getCol(values, ['purchaselimit', 'limitedecompra'], 14);
+
+      let rowSubdivisionName = '';
+      if (hasSubdivisionHeader) {
+        rowSubdivisionName = getCol(values, ['subdivisionname', 'subdivision', 'subdivisiones'], 11);
+      } else if (!hasCategoryHeader) {
+        rowSubdivisionName = getCellValue(values[11]);
+      }
+
+      let rowCategoryName: ProductCategory | undefined = undefined;
+      if (hasCategoryHeader) {
+        const catVal = getCol(values, ['categoryname', 'category', 'categoria'], 11).toLowerCase();
+        if (Object.values(ProductCategory).includes(catVal as any)) {
+          rowCategoryName = catVal as ProductCategory;
         }
       }
 
       const rowData = {
-        code: values[1]?.toString().trim(),
-        barcode: values[2]?.toString().trim(),
-        name: values[3]?.toString().trim(),
-        description: values[4]?.toString().trim(),
-        costPrice: values[5] ? parseFloat(values[5]) : 0,
-        price: parseFloat(values[6]),
-        stock: parseInt(values[7], 10),
-        brandName: values[8]?.toString().trim(),
-        gameName: values[9]?.toString().trim(),
-        editionName: values[10]?.toString().trim(),
-        categoryName: values[11]?.toString().trim() as ProductCategory | undefined,
-        rarityName: values[12]?.toString().trim(),
-        offerPrice: values[13] ? parseFloat(values[13]) : undefined,
-        purchaseLimit: values[14] ? parseInt(values[14], 10) : undefined,
+        code: getCol(values, ['code', 'codigo'], 1),
+        barcode: getCol(values, ['barcode', 'codigobarras'], 2),
+        name: getCol(values, ['name', 'nombre'], 3),
+        description: getCol(values, ['description', 'descripcion'], 4),
+        costPrice: rawCostPrice ? parseFloat(rawCostPrice) : 0,
+        price: parseFloat(rawPrice),
+        stock: parseInt(rawStock, 10),
+        brandName: getCol(values, ['brandname', 'brand', 'marca'], 8),
+        gameName: getCol(values, ['gamename', 'game', 'juego'], 9),
+        editionName: getCol(values, ['editionname', 'edition', 'edicion'], 10),
+        subdivisionName: rowSubdivisionName,
+        categoryName: rowCategoryName,
+        rarityName: getCol(values, ['rarityname', 'rarity', 'rareza'], 12),
+        offerPrice: rawOfferPrice ? parseFloat(rawOfferPrice) : undefined,
+        purchaseLimit: rawPurchaseLimit ? parseInt(rawPurchaseLimit, 10) : undefined,
         isVisibleStr,
-        imageUrl: values[16]?.toString().trim(),
+        imageUrl: getCol(values, ['imageurl', 'image', 'imagen'], 16),
       };
 
       // --- Validar Fila ---
@@ -486,45 +829,78 @@ export class ProductService {
         continue;
       }
 
-      const brand = brandMap.get(rowData.brandName.toLowerCase());
+      // 1. Marca: Buscar o crear automáticamente si no existe
+      let brand = brandMap.get(rowData.brandName.toLowerCase());
       if (!brand) {
-        errors.push({ row: rowNumber, message: `La marca '${rowData.brandName}' no fue encontrada en el sistema.` });
-        continue;
+        brand = await this.brandRepo.save(this.brandRepo.create({ name: rowData.brandName }));
+        brandMap.set(rowData.brandName.toLowerCase(), brand);
+        autoCreatedBrands.add(brand.name);
       }
 
+      // 2. Juego: Buscar o crear automáticamente si se especifica y no existe
       let game: Game | null = null;
       if (rowData.gameName) {
         game = gameMap.get(rowData.gameName.toLowerCase()) || null;
         if (!game) {
-          errors.push({ row: rowNumber, message: `El juego '${rowData.gameName}' no fue encontrado en el sistema.` });
-          continue;
+          game = await this.gameRepo.save(this.gameRepo.create({ name: rowData.gameName, showInNavbar: true }));
+          game.subdivisions = [];
+          gameMap.set(rowData.gameName.toLowerCase(), game);
+          autoCreatedGames.add(game.name);
         }
       }
 
+      // 3. Subdivisión: Buscar o crear automáticamente si se especifica y no existe
+      let subdivision: Subdivision | null = null;
+      if (rowData.subdivisionName) {
+        subdivision = subdivisionMap.get(rowData.subdivisionName.toLowerCase()) || null;
+        if (!subdivision) {
+          subdivision = await this.subdivisionRepo.save(this.subdivisionRepo.create({ name: rowData.subdivisionName }));
+          subdivisionMap.set(rowData.subdivisionName.toLowerCase(), subdivision);
+          autoCreatedSubdivisions.add(subdivision.name);
+        }
+
+        // Si se especifica un juego, asegurar que la subdivisión esté asignada al juego
+        if (game) {
+          if (!game.subdivisions) {
+            game.subdivisions = [];
+          }
+          const alreadyLinked = game.subdivisions.some(s => s.id === subdivision!.id || s.name.toLowerCase() === subdivision!.name.toLowerCase());
+          if (!alreadyLinked) {
+            game.subdivisions.push(subdivision);
+            await this.gameRepo.save(game);
+          }
+        }
+      }
+
+      // 4. Edición: Buscar o crear automáticamente si se especifica y no existe
       let edition: Edition | null = null;
       if (rowData.editionName) {
         edition = editionMap.get(rowData.editionName.toLowerCase()) || null;
         if (!edition) {
-          errors.push({ row: rowNumber, message: `La edición '${rowData.editionName}' no fue encontrada en el sistema.` });
-          continue;
+          edition = await this.editionRepo.save(this.editionRepo.create({ name: rowData.editionName, game: game || null }));
+          editionMap.set(rowData.editionName.toLowerCase(), edition);
+          autoCreatedEditions.add(edition.name);
         }
       }
 
+      // 5. Rareza: Buscar o crear automáticamente si se especifica y no existe
       let rarity: Rarity | null = null;
       if (rowData.rarityName) {
         rarity = rarityMap.get(rowData.rarityName.toLowerCase()) || null;
         if (!rarity) {
-          errors.push({ row: rowNumber, message: `La rareza '${rowData.rarityName}' no fue encontrada en el sistema.` });
-          continue;
+          rarity = await this.rarityRepo.save(this.rarityRepo.create({ name: rowData.rarityName }));
+          rarityMap.set(rowData.rarityName.toLowerCase(), rarity);
+          autoCreatedRarities.add(rarity.name);
         }
       }
 
-      if (rowData.categoryName && !Object.values(ProductCategory).includes(rowData.categoryName.toLowerCase() as any)) {
-        errors.push({ row: rowNumber, message: `Categoría inválida: '${rowData.categoryName}'.` });
-        continue;
-      }
-
       const existingProduct = existingProductsMap.get(rowData.code) || (rowData.barcode ? existingProductsMap.get(rowData.barcode) : undefined);
+
+      if (existingProduct) {
+        updatedProductsCount++;
+      } else {
+        createdProductsCount++;
+      }
 
       // Procesar visibilidad
       let isVisible = true;
@@ -568,12 +944,13 @@ export class ProductService {
         brand,
         game,
         edition,
-        category: (rowData.categoryName?.toLowerCase() as ProductCategory) || (existingProduct?.category || ProductCategory.CARTA),
+        subdivision: subdivision || (existingProduct?.subdivision || null),
+        category: rowData.categoryName || (existingProduct?.category || null),
         rarity,
         offerPrice: (rowData.offerPrice !== undefined && !isNaN(rowData.offerPrice)) ? rowData.offerPrice : (existingProduct?.offerPrice),
         purchaseLimit: (rowData.purchaseLimit !== undefined && !isNaN(rowData.purchaseLimit)) ? rowData.purchaseLimit : (existingProduct?.purchaseLimit),
         isVisible,
-        imageUrl: rowData.imageUrl || (existingProduct?.imageUrl),
+        imageUrl: (rowData.imageUrl && !rowData.imageUrl.includes('placeholder')) ? rowData.imageUrl : (existingProduct?.imageUrl || '/uploads/defecto-img.png'),
       };
 
       productsToUpsert.push(productData);
@@ -613,8 +990,31 @@ export class ProductService {
         }
       }
 
-      return { message: `Carga exitosa: ${productsToUpsert.length} productos procesados (creados o actualizados con Kardex auditado).` };
+      const summary = {
+        totalProcessed: productsToUpsert.length,
+        createdProducts: createdProductsCount,
+        updatedProducts: updatedProductsCount,
+        autoCreatedBrands: Array.from(autoCreatedBrands),
+        autoCreatedGames: Array.from(autoCreatedGames),
+        autoCreatedEditions: Array.from(autoCreatedEditions),
+        autoCreatedRarities: Array.from(autoCreatedRarities),
+        autoCreatedSubdivisions: Array.from(autoCreatedSubdivisions),
+      };
+
+      let detailMsg = `Carga exitosa: ${productsToUpsert.length} productos procesados (${createdProductsCount} creados, ${updatedProductsCount} actualizados con Kardex auditado).`;
+      const autoTotal = summary.autoCreatedBrands.length + summary.autoCreatedGames.length + summary.autoCreatedEditions.length + summary.autoCreatedRarities.length + summary.autoCreatedSubdivisions.length;
+      if (autoTotal > 0) {
+        detailMsg += ` Se crearon automáticamente relaciones no existentes.`;
+      }
+
+      return {
+        message: detailMsg,
+        summary,
+      };
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new BadRequestException(`Ocurrió un error al procesar el archivo: ${error.message}`);
     }
   }

@@ -4,13 +4,13 @@ import { ExcelService } from './excel.service';
 import { Brand } from 'src/brands/brand.entity';
 import { Game } from 'src/games/game.entity';
 import { Edition } from 'src/editions/edition.entity';
+import { Subdivision } from 'src/subdivisions/subdivision.entity';
 
 @Module({
   imports: [
-    // Hacemos que los repositorios de Brand, Game y Edition estén disponibles
-    TypeOrmModule.forFeature([Brand, Game, Edition]),
+    TypeOrmModule.forFeature([Brand, Game, Edition, Subdivision]),
   ],
   providers: [ExcelService],
-  exports: [ExcelService], // Exportamos el servicio para que otros módulos puedan usarlo
+  exports: [ExcelService],
 })
 export class ExcelModule {}

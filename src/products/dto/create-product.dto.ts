@@ -25,9 +25,9 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
   @IsEnum(ProductCategory)
-  @IsNotEmpty()
-  category: ProductCategory;
+  category?: ProductCategory;
 
   @Transform(({ value }) => parseFloat(value)) // Convert string to float
   @IsNumber({ maxDecimalPlaces: 2 }) // Ensure correct decimal format
@@ -89,6 +89,12 @@ export class CreateProductDto {
   @IsInt()
   @IsPositive()
   rarityId?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => value ? parseInt(value, 10) : undefined)
+  @IsInt()
+  @IsPositive()
+  subdivisionId?: number;
 
   @IsOptional()
   @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))

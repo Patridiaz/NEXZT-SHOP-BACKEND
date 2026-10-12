@@ -8,15 +8,15 @@ import { Game } from 'src/games/game.entity';
 import { EditionsModule } from 'src/editions/editions.module';
 import { Rarity } from 'src/rarities/rarity.entity';
 import { RaritiesModule } from 'src/rarities/rarities.module';
+import { Subdivision } from 'src/subdivisions/subdivision.entity';
 import { ProductController } from './products.controller';
 import { ProductService } from './products.service';
 import { ExcelModule } from 'src/excel/excel.module';
-
 import { KardexModule } from 'src/kardex/kardex.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, Brand, Edition, Game, Rarity]),
+    TypeOrmModule.forFeature([Product, Brand, Edition, Game, Rarity, Subdivision]),
     BrandsModule,
     EditionsModule,
     RaritiesModule,
@@ -25,6 +25,6 @@ import { KardexModule } from 'src/kardex/kardex.module';
   ],
   controllers: [ProductController],
   providers: [ProductService],
-  exports: [ProductService] // ✅ AÑADE ESTA LÍNEA
+  exports: [ProductService],
 })
-export class ProductsModule { }
+export class ProductsModule {}
