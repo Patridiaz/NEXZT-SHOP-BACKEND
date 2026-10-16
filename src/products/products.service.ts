@@ -15,6 +15,7 @@ import { Subdivision } from 'src/subdivisions/subdivision.entity';
 
 import { KardexService } from 'src/kardex/kardex.service';
 import { KardexMovementType } from 'src/kardex/enums/kardex-movement-type.enum';
+import { StockAlertsService } from './stock-alerts.service';
 
 @Injectable()
 export class ProductService {
@@ -27,6 +28,7 @@ export class ProductService {
     @InjectRepository(Rarity) private readonly rarityRepo: Repository<Rarity>,
     @InjectRepository(Subdivision) private readonly subdivisionRepo: Repository<Subdivision>,
     private readonly kardexService: KardexService,
+    private readonly stockAlertsService: StockAlertsService,
     private entityManager: EntityManager,
   ) { }
 
@@ -356,6 +358,17 @@ export class ProductService {
       });
     }
 
+    // Evaluar alertas de stock si cambiaron stock, minStock o purchaseLimit
+    if (
+      (targetStock !== undefined && targetStock !== previousStock) ||
+      dto.minStock !== undefined ||
+      dto.purchaseLimit !== undefined
+    ) {
+      this.stockAlertsService.checkAndAlert([savedProduct.id]).catch((err) => {
+        console.error('Error al evaluar alertas de stock post-actualización:', err);
+      });
+    }
+
     return (await this.productRepo.findOne({
       where: { id: savedProduct.id },
       relations: ['brand', 'edition', 'game', 'rarity', 'subdivision'],
@@ -412,8 +425,10 @@ export class ProductService {
  * Utiliza una transacción para asegurar la consistencia de los datos.
  */
   async deductStock(items: OrderItem[]): Promise<void> {
+    const affectedProductIds: number[] = [];
     for (const item of items) {
       if (item.product) {
+        affectedProductIds.push(item.product.id);
         await this.kardexService.registerMovement({
           productId: item.product.id,
           movementType: KardexMovementType.SALIDA_VENTA,
@@ -423,6 +438,17 @@ export class ProductService {
         });
       }
     }
+
+    if (affectedProductIds.length > 0) {
+      // Verificar y enviar alertas de stock mínimo y límite de compra web si corresponde
+      this.stockAlertsService.checkAndAlert(affectedProductIds).catch((err) => {
+        console.error('Error evaluando alertas de stock post-venta online:', err);
+      });
+    }
+  }
+
+  async checkStockAlerts(productIds?: number[]) {
+    return this.stockAlertsService.checkAndAlert(productIds);
   }
 
 

@@ -11,6 +11,7 @@ import { RaritiesModule } from 'src/rarities/rarities.module';
 import { Subdivision } from 'src/subdivisions/subdivision.entity';
 import { ProductController } from './products.controller';
 import { ProductService } from './products.service';
+import { StockAlertsService } from './stock-alerts.service';
 import { ExcelModule } from 'src/excel/excel.module';
 import { KardexModule } from 'src/kardex/kardex.module';
 
@@ -24,7 +25,7 @@ import { KardexModule } from 'src/kardex/kardex.module';
     KardexModule,
   ],
   controllers: [ProductController],
-  providers: [ProductService],
-  exports: [ProductService],
+  providers: [ProductService, StockAlertsService],
+  exports: [ProductService, StockAlertsService],
 })
 export class ProductsModule {}

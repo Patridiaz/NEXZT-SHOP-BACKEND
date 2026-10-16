@@ -12,11 +12,13 @@ import { Region } from 'src/locations/region.entity';
 import { Commune } from 'src/locations/commune.entity';
 
 import { KardexModule } from 'src/kardex/kardex.module';
+import { ProductsModule } from 'src/products/products.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Order, OrderItem, CreditNote, PaymentTransaction, Region, Commune]),
     CartModule,
     KardexModule,
+    ProductsModule,
   ],
   providers: [OrdersService],
   controllers: [OrdersController],

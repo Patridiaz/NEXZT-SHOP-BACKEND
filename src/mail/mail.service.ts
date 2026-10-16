@@ -174,4 +174,170 @@ export class MailService {
     `;
     await this.sendMail(userEmail, `Pedido #${orderCode} Cancelado - Nextz`, this.getBaseTemplate(content));
   }
+
+  async sendLowStockAlertEmail(targetEmail: string, products: StockAlertProductItem[]) {
+    if (!products || products.length === 0) return;
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://nextz.cl';
+    const inventoryUrl = `${frontendUrl}/admin/inventory`;
+
+    const rowsHtml = products
+      .map((p) => {
+        const priceFormatted =
+          p.price !== undefined
+            ? new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(p.price)
+            : '-';
+        return `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px 8px; font-family: monospace; font-size: 13px; font-weight: bold; color: #0f172a;">${p.code}</td>
+          <td style="padding: 10px 8px; font-size: 13px; color: #1e293b;">
+            <strong>${p.name}</strong>
+            ${p.brandName ? `<br><span style="font-size: 11px; color: #64748b;">Marca: ${p.brandName}</span>` : ''}
+          </td>
+          <td style="padding: 10px 8px; text-align: center;">
+            <span style="display: inline-block; padding: 4px 10px; background-color: #fee2e2; color: #dc2626; border-radius: 6px; font-weight: bold; font-size: 13px;">
+              ${p.stock} un.
+            </span>
+          </td>
+          <td style="padding: 10px 8px; text-align: center; font-size: 13px; color: #475569;">
+            ${p.minStock ?? 5} un.
+          </td>
+          <td style="padding: 10px 8px; text-align: right; font-size: 13px; font-weight: 600; color: #0f172a;">
+            ${priceFormatted}
+          </td>
+        </tr>
+      `;
+      })
+      .join('');
+
+    const count = products.length;
+    const subject = `⚠️ Alerta de Inventario: ${count} producto${count > 1 ? 's en' : ' en'} Stock Mínimo - Nextz`;
+
+    const content = `
+      <div style="margin-bottom: 20px;">
+        <span style="display: inline-block; padding: 4px 12px; background-color: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 9999px; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
+          Alerta de Inventario
+        </span>
+        <h2 style="color: #0f172a; margin: 12px 0 6px 0; font-size: 20px;">Productos en Límite de Stock Mínimo</h2>
+        <p style="color: #475569; font-size: 14px; margin: 0; line-height: 1.5;">
+          Se ha detectado que los siguientes productos han alcanzado o están por debajo de su umbral de stock mínimo. Se recomienda reponer stock para evitar quiebres de inventario:
+        </p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <thead>
+          <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left;">
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569;">SKU</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569;">Producto</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569; text-align: center;">Stock Actual</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569; text-align: center;">Mínimo</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569; text-align: right;">Precio</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <div style="text-align: center; margin-top: 25px;">
+        <a href="${inventoryUrl}" class="button" style="background-color: #c8102e; border-radius: 8px; padding: 12px 24px; text-decoration: none;">
+          Gestionar Inventario en Admin
+        </a>
+      </div>
+      <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 20px;">
+        Notificación automática generada por Nextz Shop.
+      </p>
+    `;
+
+    await this.sendMail(targetEmail, subject, this.getBaseTemplate(content));
+  }
+
+  async sendPurchaseLimitStockMatchEmail(targetEmail: string, products: StockAlertProductItem[]) {
+    if (!products || products.length === 0) return;
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://nextz.cl';
+    const productsUrl = `${frontendUrl}/admin/products`;
+
+    const rowsHtml = products
+      .map((p) => {
+        const priceFormatted =
+          p.price !== undefined
+            ? new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(p.price)
+            : '-';
+        return `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px 8px; font-family: monospace; font-size: 13px; font-weight: bold; color: #0f172a;">${p.code}</td>
+          <td style="padding: 10px 8px; font-size: 13px; color: #1e293b;">
+            <strong>${p.name}</strong>
+            ${p.brandName ? `<br><span style="font-size: 11px; color: #64748b;">Marca: ${p.brandName}</span>` : ''}
+          </td>
+          <td style="padding: 10px 8px; text-align: center;">
+            <span style="display: inline-block; padding: 4px 10px; background-color: #fef3c7; color: #b45309; border-radius: 6px; font-weight: bold; font-size: 13px;">
+              ${p.stock} un.
+            </span>
+          </td>
+          <td style="padding: 10px 8px; text-align: center; font-size: 13px; font-weight: bold; color: #b45309;">
+            ${p.purchaseLimit} un./compra
+          </td>
+          <td style="padding: 10px 8px; text-align: right; font-size: 13px; font-weight: 600; color: #0f172a;">
+            ${priceFormatted}
+          </td>
+        </tr>
+      `;
+      })
+      .join('');
+
+    const count = products.length;
+    const subject = `⚡ Alerta: ${count} producto${count > 1 ? 's tienen' : ' tiene'} Límite de Compra Web igual a Stock - Nextz`;
+
+    const content = `
+      <div style="margin-bottom: 20px;">
+        <span style="display: inline-block; padding: 4px 12px; background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; border-radius: 9999px; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
+          Alerta de Venta Web
+        </span>
+        <h2 style="color: #0f172a; margin: 12px 0 6px 0; font-size: 20px;">Límite de Compra Web igual a Stock Disponible</h2>
+        <p style="color: #475569; font-size: 14px; margin: 0; line-height: 1.5;">
+          El stock disponible de los siguientes productos es exactamente igual a su límite máximo de compra web.
+          <strong>Un único comprador podría adquirir la totalidad del inventario restante en una sola transacción:</strong>
+        </p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <thead>
+          <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left;">
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569;">SKU</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569;">Producto</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569; text-align: center;">Stock Disponible</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569; text-align: center;">Límite Web</th>
+            <th style="padding: 10px 8px; font-size: 11px; text-transform: uppercase; color: #475569; text-align: right;">Precio</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <div style="text-align: center; margin-top: 25px;">
+        <a href="${productsUrl}" class="button" style="background-color: #f59e0b; border-radius: 8px; padding: 12px 24px; text-decoration: none;">
+          Revisar Productos en Admin
+        </a>
+      </div>
+      <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 20px;">
+        Notificación automática generada por Nextz Shop.
+      </p>
+    `;
+
+    await this.sendMail(targetEmail, subject, this.getBaseTemplate(content));
+  }
+}
+
+export interface StockAlertProductItem {
+  id: number;
+  code: string;
+  name: string;
+  stock: number;
+  minStock?: number;
+  purchaseLimit?: number | null;
+  price?: number;
+  brandName?: string;
 }

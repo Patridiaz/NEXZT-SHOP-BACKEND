@@ -14,6 +14,7 @@ import { KardexMovementType } from 'src/kardex/enums/kardex-movement-type.enum';
 import { Region } from 'src/locations/region.entity';
 import { Commune } from 'src/locations/commune.entity';
 import { MailService } from 'src/mail/mail.service';
+import { StockAlertsService } from 'src/products/stock-alerts.service';
 import * as bcrypt from 'bcrypt';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -31,6 +32,7 @@ export class OrdersService {
     @InjectRepository(Commune) private communeRepo: Repository<Commune>,
     @InjectRepository(CreditNote) private creditNoteRepo: Repository<CreditNote>,
     private mailService: MailService,
+    private stockAlertsService: StockAlertsService,
   ) { }
 
   async createOrder(dto: CreateOrderDto, userId?: number): Promise<Order> {
@@ -245,7 +247,7 @@ export class OrdersService {
   }
 
   async createPosOrder(dto: CreatePosOrderDto, cashierUser: User): Promise<Order> {
-    return this.entityManager.transaction(async transactionalEntityManager => {
+    const savedOrder = await this.entityManager.transaction(async transactionalEntityManager => {
       if (!dto.items || dto.items.length === 0) {
         throw new BadRequestException('El carrito del POS está vacío.');
       }
@@ -335,6 +337,16 @@ export class OrdersService {
 
       return savedOrder;
     });
+
+    // Notificar alertas de stock para los productos vendidos en el POS
+    if (dto.items && dto.items.length > 0) {
+      const posProductIds = dto.items.map((it) => it.productId);
+      this.stockAlertsService.checkAndAlert(posProductIds).catch((err) => {
+        console.error('Error evaluando alertas de stock post-venta POS:', err);
+      });
+    }
+
+    return savedOrder;
   }
 
   async findAll(channel?: string) {

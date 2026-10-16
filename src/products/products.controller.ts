@@ -105,7 +105,14 @@ export class ProductController {
     return this.productService.findByBarcode(barcode);
   }
 
-  // --- Endpoints de Carga Masiva ---
+  // --- Endpoints de Carga Masiva y Alertas ---
+  @Post('alerts/check')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async checkStockAlerts() {
+    return this.productService.checkStockAlerts();
+  }
+
   @Get('bulk/template')
   async downloadTemplate(@Res() res: Response) {
     const buffer = await this.excelService.generateProductTemplate();
