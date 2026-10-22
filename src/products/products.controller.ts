@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Query, ParseEnumPipe, DefaultValuePipe, ParseIntPipe, NotFoundException, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, FileValidator, Res, BadRequestException, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Query, ParseEnumPipe, DefaultValuePipe, ParseIntPipe, NotFoundException, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, FileValidator, Res, BadRequestException, UseGuards, ForbiddenException, Req } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 
 export class ExcelFileValidator extends FileValidator {
@@ -141,8 +141,9 @@ export class ProductController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updateProductDto: UpdateProductDto,
     @UploadedFile() file?: Express.Multer.File,
+    @Req() req?: any,
   ) {
-    return this.productService.update(id, updateProductDto, file);
+    return this.productService.update(id, updateProductDto, file, req?.user?.id);
   }
 
   @Delete(':id')

@@ -273,14 +273,16 @@ export class ProductService {
     return product;
   }
 
-  async update(id: number, dto: UpdateProductDto, file?: Express.Multer.File): Promise<Product> {
+  async update(id: number, dto: UpdateProductDto, file?: Express.Multer.File, userId?: number): Promise<Product> {
     const existingProduct = await this.productRepo.findOne({ where: { id } });
     if (!existingProduct) {
       throw new NotFoundException(`Producto con ID ${id} no encontrado`);
     }
 
-    const previousStock = existingProduct.stock;
-    const targetStock = dto.stock;
+    const previousStock = Number(existingProduct.stock);
+    const targetStock = dto.stock !== undefined && dto.stock !== null && dto.stock !== ('' as any)
+      ? Number(dto.stock)
+      : undefined;
 
     // 1. Usamos 'preload' para cargar el producto manteniendo el stock previo intacto antes del Kardex
     const product = await this.productRepo.preload({
@@ -345,7 +347,7 @@ export class ProductService {
     const savedProduct = await this.productRepo.save(product);
 
     // 5. Auditar cambio manual de stock en Kardex si hubo diferencia
-    if (targetStock !== undefined && targetStock !== previousStock) {
+    if (targetStock !== undefined && !isNaN(targetStock) && targetStock !== previousStock) {
       const diff = targetStock - previousStock;
       const movementType = diff > 0 ? KardexMovementType.AJUSTE_POSITIVO : KardexMovementType.AJUSTE_NEGATIVO;
       await this.kardexService.registerMovement({
@@ -355,12 +357,13 @@ export class ProductService {
         unitCost: savedProduct.costPrice,
         reference: 'Ajuste Manual Ficha Producto',
         notes: `Modificación manual de stock de ${previousStock} a ${targetStock}`,
+        userId,
       });
     }
 
     // Evaluar alertas de stock si cambiaron stock, minStock o purchaseLimit
     if (
-      (targetStock !== undefined && targetStock !== previousStock) ||
+      (targetStock !== undefined && !isNaN(targetStock) && targetStock !== previousStock) ||
       dto.minStock !== undefined ||
       dto.purchaseLimit !== undefined
     ) {
